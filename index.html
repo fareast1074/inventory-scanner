@@ -2,119 +2,157 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QC Audit Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>QC Audit Pro - Circuit Edition</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; --bg: #f4f4f9; }
-        body { font-family: 'Segoe UI', sans-serif; max-width: 800px; margin: auto; padding: 15px; background: var(--bg); }
+        :root { 
+            --primary: #00e5ff; /* Electrical Cyan */
+            --success: #28a745; 
+            --danger: #ff1744; 
+            --bg: #0a192f; /* Deep Dark Space */
+            --card-bg: rgba(17, 34, 64, 0.9);
+            --fail-bg: #4a1212;
+            --fail-text: #ff8a80;
+        }
+
+        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 0; background: var(--bg); color: #ccd6f6; overflow-x: hidden; }
         
-        /* UI Header */
-        .status-header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px; }
-        #reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 8px; overflow: hidden; display: none; border: 2px solid var(--primary); }
+        /* --- Electrical Login Page Style --- */
+        #loginOverlay { 
+            position: fixed; inset: 0; 
+            background: radial-gradient(circle at center, #112240 0%, #0a192f 100%);
+            display: flex; align-items: center; justify-content: center; z-index: 1000; 
+        }
+
+        /* Animated Circuit Background Lines */
+        .circuit-bg {
+            position: absolute; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: -1;
+        }
+
+        .login-card { 
+            background: var(--card-bg); padding: 40px; border-radius: 20px; 
+            width: 320px; text-align: center; 
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .login-card h2 { color: var(--primary); margin-top: 0; letter-spacing: 2px; text-transform: uppercase; font-size: 1.2em; }
+        .login-card input { 
+            width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #233554; 
+            border-radius: 8px; box-sizing: border-box; background: #0a192f; color: white;
+            outline: none; transition: 0.3s;
+        }
+        .login-card input:focus { border-color: var(--primary); box-shadow: 0 0 10px rgba(0,229,255,0.2); }
+
+        /* --- Main App Style --- */
+        #mainApp { display: none; padding: 15px; width: 100%; max-width: 800px; margin: 0 auto; }
         
-        #loginOverlay { position: fixed; inset: 0; background: var(--primary); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .login-card { background: white; padding: 30px; border-radius: 12px; width: 300px; text-align: center; }
-        .login-card input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .status-header { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid var(--primary); }
         
-        #mainApp { display: none; }
-        .controls { margin: 15px 0; display: flex; flex-wrap: wrap; gap: 10px; }
-        button { padding: 12px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; flex: 1; transition: 0.2s; }
-        button:active { opacity: 0.7; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .counter-banner { background: #112240; color: var(--primary); padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; border: 1px solid #233554; }
+        .mode-banner { background: #ffc107; color: #000; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .mode-auto { background: #112240; color: var(--primary); border: 1px solid var(--primary); }
+
+        #searchInput { width: 100%; padding: 12px; border: 1px solid #233554; border-radius: 8px; background: #112240; color: white; text-align: center; margin-bottom: 10px; }
+        
+        #reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 12px; overflow: hidden; display: none; border: 2px solid var(--primary); }
+        
+        button { padding: 12px; cursor: pointer; border: none; border-radius: 8px; font-weight: bold; transition: 0.2s; }
         .btn-cam { background: #6f42c1; color: white; }
         .btn-export { background: var(--success); color: white; }
-        .btn-clear-main { background: var(--danger); color: white; margin-top: 10px; width: 100%; flex: none; }
+        .btn-delete { background: none; color: var(--danger); font-size: 1.2em; padding: 0 5px; }
+
+        .scroll-table { max-height: 400px; overflow-y: auto; background: var(--card-bg); border-radius: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { border-bottom: 1px solid #233554; padding: 12px; text-align: center; }
+        th { background: #1d2d50; color: var(--primary); position: sticky; top: 0; }
         
-        /* Entry Table */
-        .scroll-table { max-height: 350px; overflow-y: auto; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
-        th, td { border-bottom: 1px solid #eee; padding: 12px; text-align: left; }
-        th { background: var(--primary); color: white; position: sticky; top: 0; }
-        
-        /* Modal Form */
-        #formModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; }
-        .modal-content { background: white; margin: 15% auto; padding: 25px; border-radius: 12px; width: 85%; max-width: 350px; }
-        .dropdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        select, input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1em; box-sizing: border-box; }
-        
-        .modal-actions { display: flex; gap: 10px; margin-top: 15px; }
-        .btn-save { background: var(--primary); color: white; flex: 2; font-size: 1.1em; }
-        .btn-clear-form { background: #6c757d; color: white; flex: 1; }
+        .row-fail { background-color: var(--fail-bg) !important; color: var(--fail-text); }
+
+        /* Modal & Toasts */
+        #formModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-content { background: #112240; padding: 25px; border-radius: 16px; width: 90%; max-width: 350px; text-align: center; border: 1px solid var(--primary); }
+        select, #remarkInput { width: 100%; padding: 12px; border: 1px solid #233554; border-radius: 8px; background: #0a192f; color: white; margin-bottom: 10px; }
+
+        #toast { visibility: hidden; min-width: 200px; background: var(--primary); color: #000; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 3000; bottom: 30px; left: 50%; transform: translateX(-50%); font-weight: bold; }
+        #toast.show { visibility: visible; animation: fadein 0.3s, fadeout 0.3s 1s; }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
 <body>
 
     <div id="loginOverlay">
+        <div class="circuit-bg"></div>
         <div class="login-card">
-            <h2>QC Login</h2>
-            <input type="text" id="username" placeholder="Auditor Name">
-            <input type="password" id="password" placeholder="Password">
-            <button class="btn-export" style="width:100%" onclick="checkLogin()">Login</button>
+            <h2>QC Audit <span style="color:white">Pro</span></h2>
+            <div style="font-size: 0.7em; color: var(--primary); margin-bottom: 20px;">ELECTRICAL COMPONENT LOGISTICS</div>
+            <input type="text" id="username" placeholder="Auditor Name" autocomplete="off">
+            <input type="password" id="password" placeholder="Terminal Password">
+            <button class="btn-export" style="width:100%; background: var(--primary); color: #000;" onclick="checkLogin()">INITIALIZE SYSTEM</button>
         </div>
     </div>
 
     <div id="mainApp">
         <div class="status-header">
-            <div><strong>User:</strong> <span id="currentUserDisplay"></span></div>
-            <button onclick="location.reload()" style="background:#6c757d; color:white; padding:5px 10px; font-size:0.8em;">Logout</button>
+            <div><span style="color: var(--primary)">●</span> <strong>Active User:</strong> <span id="currentUserDisplay"></span></div>
+            <button onclick="location.reload()" style="background:#233554; color:white; padding:5px 10px; font-size:0.8em;">LOGOUT</button>
         </div>
 
-        <div class="controls">
-            <button class="btn-cam" onclick="toggleCamera()">📷 Use Camera</button>
-            <button class="btn-export" onclick="exportToCSV()">📥 Download CSV</button>
+        <div class="info-grid">
+            <div class="counter-banner">SCANS: <span id="totalCount">0</span></div>
+            <div id="modeBtn" class="mode-banner mode-auto" onclick="toggleMode()">MODE: AUTO-SAVE</div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="btn-cam" style="flex:1" onclick="toggleCamera()">📷 CAMERA</button>
+            <button class="btn-export" style="flex:1" onclick="exportToCSV()">📥 EXPORT CSV</button>
         </div>
 
         <div id="reader"></div>
-
-        <input type="text" id="barcodeCollector" style="position: absolute; opacity: 0; pointer-events: none;">
+        <input type="text" id="searchInput" placeholder="🔍 Filter Barcodes..." onkeyup="updateTable()">
+        <input type="text" id="barcodeCollector" style="position: absolute; opacity: 0;" autocomplete="off">
 
         <div class="scroll-table">
             <table>
                 <thead>
-                    <tr><th>Time</th><th>Barcode</th><th>Loc</th><th>Due</th><th>Remark</th></tr>
+                    <tr><th>Time</th><th>Barcode</th><th>Loc</th><th>Due</th><th>Rem</th><th></th></tr>
                 </thead>
                 <tbody id="inventoryBody"></tbody>
             </table>
         </div>
         
-        <button class="btn-clear-main" onclick="clearHistory()">🗑️ Reset Scan History</button>
+        <button style="background:none; color:#4e5d78; font-size:0.8em; margin-top:20px; width:100%" onclick="clearHistory()">ERASE DATA TERMINAL</button>
     </div>
 
     <div id="formModal">
         <div class="modal-content">
-            <h3 style="margin:0; color:#888;">Item Scanned:</h3>
-            <h2 id="modalBarcode" style="margin: 5px 0 15px 0; color:var(--primary); font-family: monospace;">---</h2>
-            
-            <div class="dropdown-grid">
-                <div class="form-group">
-                    <label style="font-size:0.8em; font-weight:bold;">Location (1/0)</label>
-                    <select id="locSelect">
-                        <option value="1">1 (OK)</option>
-                        <option value="0">0 (Fail)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label style="font-size:0.8em; font-weight:bold;">Due Date (1/0)</label>
-                    <select id="dueSelect">
-                        <option value="1">1 (OK)</option>
-                        <option value="0">0 (Fail)</option>
-                    </select>
-                </div>
-            </div>
-
-            <input type="text" id="remarkInput" placeholder="Remark (Optional)">
-            
-            <div class="modal-actions">
-                <button class="btn-clear-form" onclick="resetForm()">Clear</button>
-                <button class="btn-save" onclick="submitData()">Save</button>
+            <h3 style="color:var(--primary)">QC DATA ENTRY</h3>
+            <div id="modalBarcode" style="font-family: monospace; margin-bottom:15px; color:white;"></div>
+            <select id="locSelect"><option value="1">Loc: 1 (OK)</option><option value="0">Loc: 0 (FAIL)</option></select>
+            <select id="dueSelect"><option value="1">Due: 1 (OK)</option><option value="0">Due: 0 (FAIL)</option></select>
+            <input type="text" id="remarkInput" placeholder="Enter Remark...">
+            <div style="display:flex; gap:10px;">
+                <button style="background:#233554; color:white; flex:1;" onclick="closeModal()">CANCEL</button>
+                <button style="background:var(--primary); color:#000; flex:2;" onclick="manualSubmit()">SAVE RECORD</button>
             </div>
         </div>
     </div>
 
+    <div id="toast">RECORDED</div>
+
     <script>
         const AUTH_PASS = "1234";
         let scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || [];
-        let loggedInUser = "", currentBarcode = "", html5QrCode = null;
+        let loggedInUser = "", html5QrCode = null, isAutoMode = true, tempBarcode = "";
 
         function checkLogin() {
             const u = document.getElementById('username').value.trim();
@@ -129,88 +167,92 @@
             }
         }
 
-        async function toggleCamera() {
-            const readerDiv = document.getElementById('reader');
-            if (!html5QrCode) {
-                readerDiv.style.display = "block";
-                html5QrCode = new Html5Qrcode("reader");
-                html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
-                    html5QrCode.stop().then(() => {
-                        html5QrCode = null;
-                        readerDiv.style.display = "none";
-                        processNewScan(text);
-                    });
-                });
-            } else {
-                html5QrCode.stop().then(() => { html5QrCode = null; readerDiv.style.display = "none"; });
-            }
+        function toggleMode() {
+            isAutoMode = !isAutoMode;
+            const btn = document.getElementById('modeBtn');
+            btn.innerText = isAutoMode ? "MODE: AUTO-SAVE" : "MODE: MANUAL EDIT";
+            btn.className = isAutoMode ? "mode-banner mode-auto" : "mode-banner";
+            document.getElementById('barcodeCollector').focus();
         }
 
         function initScanner() {
-            const collector = document.getElementById('barcodeCollector');
-            document.addEventListener('click', () => {
-                if(!["remarkInput", "locSelect", "dueSelect"].includes(document.activeElement.id)) collector.focus();
+            const col = document.getElementById('barcodeCollector');
+            document.addEventListener('click', (e) => {
+                if(!["searchInput", "remarkInput", "locSelect", "dueSelect"].includes(e.target.id)) col.focus();
             });
-            collector.focus();
-            collector.addEventListener('keypress', (e) => {
+            col.focus();
+            col.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    const data = collector.value.trim();
-                    if (data.length > 0) processNewScan(data);
-                    collector.value = "";
+                    const d = col.value.trim();
+                    if (d.length > 0) handleScan(d);
+                    col.value = "";
                 }
             });
         }
 
-        function processNewScan(barcode) {
-            currentBarcode = barcode;
-            document.getElementById('modalBarcode').innerText = barcode;
-            document.getElementById('formModal').style.display = "block";
-            resetForm();
+        function handleScan(barcode) {
+            if (isAutoMode) {
+                saveEntry(barcode, "1", "1", "-");
+                showToast("SAVED: " + barcode);
+            } else {
+                tempBarcode = barcode;
+                document.getElementById('modalBarcode').innerText = barcode;
+                document.getElementById('remarkInput').value = "";
+                document.getElementById('formModal').style.display = "flex";
+            }
         }
 
-        function resetForm() {
-            document.getElementById('locSelect').value = "1";
-            document.getElementById('dueSelect').value = "1";
-            document.getElementById('remarkInput').value = "";
+        function manualSubmit() {
+            saveEntry(tempBarcode, document.getElementById('locSelect').value, document.getElementById('dueSelect').value, document.getElementById('remarkInput').value.trim() || "-");
+            closeModal();
         }
 
-        function submitData() {
-            const entry = {
-                time: new Date().toLocaleTimeString(),
-                barcode: currentBarcode,
-                loc: document.getElementById('locSelect').value,
-                due: document.getElementById('dueSelect').value,
-                remark: document.getElementById('remarkInput').value.trim() || "-",
-                user: loggedInUser
-            };
-            scanHistory.unshift(entry);
+        function saveEntry(barcode, loc, due, remark) {
+            scanHistory.unshift({ time: new Date().toLocaleTimeString(), barcode, loc, due, remark, user: loggedInUser });
             localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
-            document.getElementById('formModal').style.display = "none";
             updateTable();
-            document.getElementById('barcodeCollector').focus();
         }
 
-        function updateTable() {
-            document.getElementById('inventoryBody').innerHTML = scanHistory.map(i => `
-                <tr><td>${i.time}</td><td>${i.barcode}</td><td>${i.loc}</td><td>${i.due}</td><td>${i.remark}</td></tr>
-            `).join('');
-        }
-
-        function clearHistory() {
-            if(confirm("Delete all scanned data?")) {
-                scanHistory = [];
-                localStorage.removeItem('scanHistory');
+        function deleteRow(index) {
+            if(confirm("Delete this entry?")) {
+                scanHistory.splice(index, 1);
+                localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
                 updateTable();
             }
         }
 
+        function updateTable() {
+            const q = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = scanHistory.filter(i => i.barcode.toLowerCase().includes(q));
+            document.getElementById('totalCount').innerText = scanHistory.length;
+            document.getElementById('inventoryBody').innerHTML = filtered.map((i, idx) => `
+                <tr class="${(i.loc === "0" || i.due === "0") ? 'row-fail' : ''}">
+                    <td>${i.time}</td>
+                    <td style="font-family:monospace">${i.barcode}</td>
+                    <td>${i.loc}</td><td>${i.due}</td><td>${i.remark}</td>
+                    <td><button class="btn-delete" onclick="deleteRow(${idx})">×</button></td>
+                </tr>`).join('');
+        }
+
+        function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.className = "show"; setTimeout(() => t.className = "", 1300); }
+        function closeModal() { document.getElementById('formModal').style.display = "none"; document.getElementById('barcodeCollector').focus(); }
+        function clearHistory() { if(confirm("Wipe all system data?")) { scanHistory = []; localStorage.removeItem('scanHistory'); updateTable(); } }
+        
         function exportToCSV() {
-            let csv = "Time,Barcode,Location,DueDate,Remark,User\n" + 
-                scanHistory.map(i => `"${i.time}","${i.barcode}","${i.loc}","${i.due}","${i.remark}","${i.user}"`).join("\n");
+            let csv = "Time,Barcode,Loc,Due,Remark,User\n" + scanHistory.map(i => `"${i.time}","${i.barcode}","${i.loc}","${i.due}","${i.remark}","${i.user}"`).join("\n");
             const blob = new Blob([csv], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `QC_Audit_${new Date().toLocaleDateString()}.csv`; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `QC_Audit.csv`; a.click();
+        }
+
+        async function toggleCamera() {
+            const r = document.getElementById('reader');
+            if (!html5QrCode) {
+                r.style.display = "block";
+                html5QrCode = new Html5Qrcode("reader");
+                html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+                    html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScan(text); });
+                });
+            } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
         }
     </script>
 </body>
