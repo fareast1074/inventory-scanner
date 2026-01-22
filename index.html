@@ -207,7 +207,8 @@
 
     <script>
         const AUTH_PASS = "1234";
-        let scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || [];
+        // List is always empty on start/refresh
+        let scanHistory = []; 
         let masterDB = {}; 
         let rawMasterRows = []; 
         let currentItem = null;
@@ -282,7 +283,6 @@
                 <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">MSA:</span> <span style="color:white;">${currentItem.msa}</span></div>
             `;
 
-            // Reset dropdowns to PASS
             document.getElementById('qcLoc').value = "CORRECT";
             document.getElementById('qcDue').value = "VALID";
             document.getElementById('qcMsa').value = "YES";
@@ -305,9 +305,8 @@
                 dueRes: dueVal,
                 msaRes: msaVal,
                 remark: document.getElementById('qcRemark').value || "-",
-                isFail: (locVal === "WRONG" || dueVal === "EXPIRED" || msaVal === ""||currentItem.name ==="NOT REGISTERED")
+                isFail: (locVal === "WRONG" || dueVal === "EXPIRED" || msaVal === "NO" || currentItem.name === "NOT REGISTERED")
             });
-            localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
             updateTable();
             document.getElementById('qcModal').style.display = 'none';
         }
@@ -331,7 +330,6 @@
 
         function deleteRow(id) {
             scanHistory = scanHistory.filter(item => item.id !== id);
-            localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
             updateTable();
         }
 
