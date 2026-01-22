@@ -274,8 +274,8 @@
             currentItem = { barcode, ...data };
 
             document.getElementById('modalDataBox').innerHTML = `
-				<div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:#8892b0">Equipment Code:</span> <span style="color:white; font-weight:bold;">${currentItem.barcode}</span></div>
-                <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:#8892b0">Equipment Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
+				<div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:var(--primary)">Equipment Code:</span> <span style="color:white; font-weight:bold;">${currentItem.barcode}</span></div>
+                <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Equipment Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
                 <div style="border-top: 1px solid #233554; margin: 8px 0; padding-top: 8px;"></div>
                 <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Registered location:</span> <span style="color:white;">${currentItem.loc}</span></div>
                 <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Registered Due:</span> <span style="color:white;">${currentItem.due}</span></div>
