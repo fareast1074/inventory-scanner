@@ -202,6 +202,9 @@ function handleScannedCode(barcode) {
     document.getElementById('modalDataBox').innerHTML = `
         <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:var(--primary)">Code:</span> <span style="color:white; font-weight:bold;">${currentItem.barcode}</span></div>
         <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
+        <div style="border-top: 1px solid #233554; margin: 8px 0; padding-top: 8px;"></div>
+        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Location:</span> <span style="color:white;">${currentItem.loc}</span></div>
+        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Due:</span> <span style="color:white;">${currentItem.due}</span></div>
     `;
     setToggle('Loc', 'CORRECT'); setToggle('Due', 'VALID'); setToggle('Msa', 'YES');
     document.getElementById('qcModal').style.display = 'flex';
