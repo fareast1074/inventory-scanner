@@ -1,25 +1,52 @@
 const AUTH_PASS = "1234";
+const MASTER_PASS = "admin";
 const MONTH_ORDER = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-let scanHistory = JSON.parse(localStorage.getItem('audit_history')) || []; 
-let masterDB = JSON.parse(localStorage.getItem('master_db')) || {}; 
-let rawMasterRows = JSON.parse(localStorage.getItem('raw_rows')) || []; 
+let scanHistory = []; 
+let masterDB = {}; 
+let rawMasterRows = []; 
+let pendingUploads = JSON.parse(localStorage.getItem('pending_queue')) || [];
 
 let currentItem = null;
 let loggedInUser = "";
 let html5QrCode = null;
 let currentGaugeValue = 0;
 let targetGaugeValue = 0;
+let isOnline = false;
 
 let selectedLoc = "CORRECT";
 let selectedDue = "VALID";
 let selectedMsa = "YES";
 
-// --- CLOUD LISTENERS ---
+// --- CONNECTION HEARTBEAT & OFFLINE QUEUE PROCESSING ---
+const syncIcon = document.getElementById('syncStatus');
+db.ref(".info/connected").on("value", (snap) => {
+    isOnline = snap.val() === true;
+    if (isOnline) {
+        syncIcon.style.background = "#00e676";
+        syncIcon.style.boxShadow = "0 0 10px #00e676";
+        processOfflineQueue();
+    } else {
+        syncIcon.style.background = "#ff1744";
+        syncIcon.style.boxShadow = "0 0 10px #ff1744";
+    }
+});
+
+function processOfflineQueue() {
+    if (pendingUploads.length > 0 && isOnline) {
+        pendingUploads.forEach((data) => {
+            db.ref('audit_history').push(data);
+        });
+        pendingUploads = [];
+        localStorage.removeItem('pending_queue');
+        console.log("Offline scans synced to Cloud.");
+    }
+}
+
+// --- REAL-TIME LISTENERS ---
 db.ref('audit_history').on('value', (snapshot) => {
     const data = snapshot.val();
     scanHistory = data ? Object.values(data).sort((a, b) => b.id - a.id) : [];
-    localStorage.setItem('audit_history', JSON.stringify(scanHistory));
     updateDisplay();
 });
 
@@ -28,8 +55,6 @@ db.ref('master_list').on('value', (snapshot) => {
     if (data) {
         masterDB = data.masterDB;
         rawMasterRows = data.rawMasterRows;
-        localStorage.setItem('master_db', JSON.stringify(masterDB));
-        localStorage.setItem('raw_rows', JSON.stringify(rawMasterRows));
         rebuildFilters();
         updateDisplay();
     }
@@ -43,23 +68,19 @@ function checkLogin() {
         document.getElementById('loginOverlay').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
         initScannerInput();
-        if (Object.keys(masterDB).length > 0) { rebuildFilters(); updateDisplay(); } else { drawGauge(0); }
+        updateDisplay();
     } else { alert("Invalid Credentials"); }
 }
 
 function logout() {
-    if(confirm("Logging out will clear local cache. Continue?")) {
-        localStorage.clear();
-        location.reload();
-    }
+    if(confirm("Logout?")) { location.reload(); }
 }
 
 function loadMasterData(input) {
     const reader = new FileReader();
     reader.onload = function(e) {
         const rows = e.target.result.split(/\r?\n/).filter(row => row.trim() !== "");
-        let newMasterDB = {}; 
-        let newRawRows = [];
+        let newMasterDB = {}; let newRawRows = [];
         rows.forEach((row, i) => {
             const columns = row.split(',').map(s => s.trim());
             if (i === 0) { newRawRows.push(columns); return; }
@@ -130,15 +151,12 @@ function updateDisplay() {
     document.getElementById('progressSubLabel').innerText = `Success: ${successScanned} / ${filteredTargetList.length}`;
     drawGauge(per);
 
-    const filteredScans = scanHistory.filter(h => {
-        const m = masterDB[h.barcode] || {};
-        return (h.barcode.includes(s) || h.name.toUpperCase().includes(s)) && (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf);
-    });
+    document.getElementById('totalScans').innerText = scanHistory.length;
+    document.getElementById('totalFails').innerText = scanHistory.filter(x => x.isFail).length;
 
-    document.getElementById('totalScans').innerText = filteredScans.length;
-    document.getElementById('totalFails').innerText = filteredScans.filter(x => x.isFail).length;
-
-    document.getElementById('inventoryBody').innerHTML = filteredScans.map(i => `<tr class="${i.isFail ? 'row-fail' : ''}">
+    document.getElementById('inventoryBody').innerHTML = scanHistory
+        .filter(h => h.barcode.includes(s) || h.name.toUpperCase().includes(s))
+        .map(i => `<tr class="${i.isFail ? 'row-fail' : ''}">
         <td>${i.time}</td><td>${i.barcode}</td><td>${i.name}</td><td style="color:var(--primary)">${i.pic}</td>
         <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
         <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
@@ -156,20 +174,17 @@ function drawGauge(percent) { targetGaugeValue = percent; animateGauge(); }
 
 function animateGauge() {
     const diff = targetGaugeValue - currentGaugeValue;
-    if (Math.abs(diff) < 0.1) { currentGaugeValue = targetGaugeValue; } else { currentGaugeValue += diff * 0.1; requestAnimationFrame(animateGauge); }
+    if (Math.abs(diff) < 0.1) { currentGaugeValue = targetGaugeValue; } 
+    else { currentGaugeValue += diff * 0.1; requestAnimationFrame(animateGauge); }
     const canvas = document.getElementById('gaugeCanvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d'), centerX = 50, centerY = 50, radius = 42;
+    const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 100, 100);
-    ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI); ctx.strokeStyle = '#0a192f'; ctx.lineWidth = 10; ctx.stroke();
+    ctx.beginPath(); ctx.arc(50, 50, 42, 0, 2 * Math.PI); ctx.strokeStyle = '#0a192f'; ctx.lineWidth = 10; ctx.stroke();
     const startAngle = -0.5 * Math.PI;
     const endAngle = (currentGaugeValue / 100) * (2 * Math.PI) + startAngle;
-    let color = getComputedStyle(document.documentElement).getPropertyValue('--success').trim();
-    if (currentGaugeValue < 70) color = getComputedStyle(document.documentElement).getPropertyValue('--warning').trim();
-    if (currentGaugeValue < 30) color = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
-    ctx.beginPath(); ctx.arc(centerX, centerY, radius, startAngle, endAngle); ctx.strokeStyle = color; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(50, 50, 42, startAngle, endAngle); ctx.strokeStyle = '#00e676'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
     document.getElementById('progressPercent').innerText = Math.round(currentGaugeValue) + "%";
-    document.getElementById('progressPercent').style.color = color;
 }
 
 function handleScannedCode(barcode) {
@@ -187,13 +202,9 @@ function handleScannedCode(barcode) {
     document.getElementById('modalDataBox').innerHTML = `
         <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:var(--primary)">Code:</span> <span style="color:white; font-weight:bold;">${currentItem.barcode}</span></div>
         <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
-        <div style="border-top: 1px solid #233554; margin: 8px 0; padding-top: 8px;"></div>
-        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Location:</span> <span style="color:white;">${currentItem.loc}</span></div>
-        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Due:</span> <span style="color:white;">${currentItem.due}</span></div>
     `;
     setToggle('Loc', 'CORRECT'); setToggle('Due', 'VALID'); setToggle('Msa', 'YES');
     document.getElementById('qcModal').style.display = 'flex';
-    setTimeout(() => document.getElementById('qcModal').focus(), 50);
 }
 
 function setToggle(type, val) {
@@ -215,14 +226,25 @@ function setToggle(type, val) {
 function submitQC() {
     if(!currentItem) return;
     const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || currentItem.name === "NOT IN DATABASE");
-    const newRef = db.ref('audit_history').push();
+    
     const auditData = {
-        id: Date.now(), cloudId: newRef.key, time: new Date().toLocaleTimeString(), 
+        id: Date.now(), time: new Date().toLocaleTimeString(), 
         barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
         locRes: selectedLoc, dueRes: selectedDue, msaRes: selectedMsa, 
         remark: document.getElementById('qcRemark').value || "-", isFail: failed
     };
-    newRef.set(auditData);
+
+    if (isOnline) {
+        const newRef = db.ref('audit_history').push();
+        auditData.cloudId = newRef.key;
+        newRef.set(auditData);
+    } else {
+        alert("OFFLINE! Scan saved locally and will sync when reconnected.");
+        pendingUploads.push(auditData);
+        localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
+        scanHistory.unshift(auditData); // Show it in UI immediately
+        updateDisplay();
+    }
     closeModal();
 }
 
@@ -236,7 +258,7 @@ function closeModal() {
 function initScannerInput() {
     const col = document.getElementById('barcodeCollector');
     document.addEventListener('mousedown', (e) => { 
-        if (!e.target.closest('.filter-panel') && !e.target.closest('.modal-content') && e.target.tagName !== 'INPUT') { 
+        if (document.getElementById('qcModal').style.display !== 'flex' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') { 
             setTimeout(() => col.focus(), 50); 
         }
     });
@@ -254,30 +276,22 @@ function resetFilters() {
 }
 
 function deleteRow(cloudId) { 
-    if(confirm("Remove this entry from Cloud and all devices?")) {
-        if(cloudId) db.ref('audit_history/' + cloudId).remove();
-    }
+    if(confirm("Remove from Cloud?")) { if(cloudId) db.ref('audit_history/' + cloudId).remove(); }
 }
 
 function clearAllCloudData() {
-    const masterPass = "F4IZ"; 
     const inputPass = prompt("Enter ADMIN PASSWORD to wipe Cloud Database:");
-    if (inputPass === masterPass) {
-        const confirmDelete = prompt("WARNING: This wipes ALL data for ALL users. Type 'YES' to execute:");
-        if (confirmDelete === "YES") {
+    if (inputPass === MASTER_PASS) {
+        if (confirm("FINAL WARNING: This deletes EVERYTHING. Continue?")) {
             db.ref('audit_history').remove();
             db.ref('master_list').remove();
-            localStorage.clear();
-            alert("Database Wiped. App reloading.");
             location.reload();
-        } else { alert("Incorrect confirmation text. Action aborted."); }
-    } else { alert("Unauthorized! Invalid Admin Password."); }
+        }
+    } else { alert("Unauthorized!"); }
 }
 
 function exportToExcel() {
     if (!rawMasterRows.length) return alert("Load Master first");
-    const now = new Date();
-    const timestamp = now.toISOString().split('T')[0] + "_" + now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
     const dataRows = rawMasterRows.map((r, idx) => {
         if (idx === 0) return [...r, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
         const s = scanHistory.find(h => h.barcode === r[0].toUpperCase());
@@ -285,7 +299,7 @@ function exportToExcel() {
     });
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Audit Report");
-    XLSX.writeFile(wb, `Full_Audit_${timestamp}.xlsx`);
+    XLSX.writeFile(wb, `Audit_Report.xlsx`);
 }
 
 function exportFilteredOnly() {
@@ -293,9 +307,6 @@ function exportFilteredOnly() {
     const pf = document.getElementById('filterProduction').value;
     const mf = document.getElementById('filterMonth').value;
     const yf = document.getElementById('filterYear').value;
-    if (!rawMasterRows.length) return alert("Load Master first");
-    const now = new Date();
-    const timestamp = now.toISOString().split('T')[0] + "_" + now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
     let dataRows = [[...rawMasterRows[0], "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"]];
     rawMasterRows.slice(1).forEach(r => {
         const item = masterDB[r[0].toUpperCase()];
@@ -306,8 +317,7 @@ function exportFilteredOnly() {
     });
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Filtered Audit");
-    const filterName = (bf || pf) ? `${bf}_${pf}` : "Filtered";
-    XLSX.writeFile(wb, `${filterName}_Audit_${timestamp}.xlsx`);
+    XLSX.writeFile(wb, `Filtered_Audit.xlsx`);
 }
 
 async function toggleCamera() {
@@ -319,5 +329,4 @@ async function toggleCamera() {
             html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text.toUpperCase()); });
         });
     } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
-
 }

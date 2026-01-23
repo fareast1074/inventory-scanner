@@ -26,11 +26,14 @@
 
     <div id="mainApp">
         <div class="user-bar">
-            <span>User: <strong id="userDisp" style="color:var(--primary)">-</strong></span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div id="syncStatus" title="Cloud Connection Status" 
+                     style="width:12px; height:12px; border-radius:50%; background:#555; box-shadow: 0 0 5px rgba(0,0,0,0.5); transition: 0.3s;">
+                </div>
+                <span>User: <strong id="userDisp" style="color:var(--primary)">-</strong></span>
+            </div>
             <div style="display:flex; gap:8px;">
-                <button onclick="clearAllCloudData()" class="btn-logout" style="border: 1px solid var(--danger); color: var(--danger); background: rgba(255, 23, 68, 0.1);">
-                    Clear Cloud
-                </button>
+                <button onclick="clearAllCloudData()" class="btn-logout" style="border: 1px solid var(--danger); color: var(--danger); background: rgba(255, 23, 68, 0.1);">Clear Cloud</button>
                 <button onclick="logout()" class="btn-logout">Logout & Clear</button>
             </div>
         </div>
@@ -47,7 +50,7 @@
         </div>
 
         <div class="load-zone">
-            <strong style="color:var(--primary)">STEP 1: LOAD MASTER CSV (ID, Name, Loc, MMM-YY, MSA)</strong><br>
+            <strong style="color:var(--primary)">STEP 1: LOAD MASTER CSV</strong><br>
             <input type="file" id="masterFile" accept=".csv" onchange="loadMasterData(this)" style="margin-top:10px;">
         </div>
 
@@ -97,39 +100,31 @@
         </div>
     </div>
 
-    <div id="qcModal" tabindex="0" onkeydown="if(event.key==='Enter') submitQC()">
+    <div id="qcModal" tabindex="0">
         <div class="modal-content">
             <h2 style="color:var(--primary); margin-top:0; text-align:center; font-size: 1.2em;">VERIFICATION</h2>
             <div id="modalDataBox" class="modal-data-box"></div>
-            
             <div class="audit-grid">
-                <div class="audit-row">
-                    <label>Location</label>
+                <div class="audit-row"><label>Location</label>
                     <div class="option-group">
                         <button class="option-btn" id="btnLocCorrect" onclick="setToggle('Loc', 'CORRECT')">CORRECT</button>
                         <button class="option-btn" id="btnLocWrong" onclick="setToggle('Loc', 'WRONG')">WRONG</button>
                     </div>
                 </div>
-
-                <div class="audit-row">
-                    <label>Due Date</label>
+                <div class="audit-row"><label>Due Date</label>
                     <div class="option-group">
                         <button class="option-btn" id="btnDueValid" onclick="setToggle('Due', 'VALID')">VALID</button>
                         <button class="option-btn" id="btnDueExpired" onclick="setToggle('Due', 'EXPIRED')">EXPIRED</button>
                     </div>
                 </div>
-
-                <div class="audit-row">
-                    <label>MSA Sticker</label>
+                <div class="audit-row"><label>MSA Sticker</label>
                     <div class="option-group">
                         <button class="option-btn" id="btnMsaYes" onclick="setToggle('Msa', 'YES')">YES</button>
                         <button class="option-btn" id="btnMsaNo" onclick="setToggle('Msa', 'NO')">NO</button>
                     </div>
                 </div>
             </div>
-
             <input type="text" id="qcRemark" class="remark-input" placeholder="Remark...">
-            
             <div style="display: flex; gap: 10px;">
                 <button class="btn-save" style="flex: 2;" onclick="submitQC()">SAVE AUDIT RECORD</button>
                 <button onclick="closeModal()" class="btn-cancel">Cancel</button>
@@ -154,7 +149,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
     </script>
-
     <script src="script.js"></script>
 </body>
 </html>
