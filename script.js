@@ -20,7 +20,6 @@ let selectedDue = "VALID";
 let selectedMsa = "YES";
 
 // --- CONNECTION HEARTBEAT & SYNC ---
-const syncIcon = document.getElementById('syncStatus');
 db.ref(".info/connected").on("value", (snap) => {
     isOnline = snap.val() === true;
     if (isOnline) {
@@ -33,22 +32,21 @@ db.ref(".info/connected").on("value", (snap) => {
     }
 });
 
-// --- UPDATED OFFLINE SYNC WITH PROGRESS & CONFLICT CHECK ---
+const syncIcon = document.getElementById('syncStatus');
+
 async function processOfflineQueue() {
     if (pendingUploads.length > 0 && isOnline) {
         const historyRef = db.ref('audit_history');
         const total = pendingUploads.length;
-        
         const progressCont = document.getElementById('syncProgressContainer');
         const progressBar = document.getElementById('syncProgressBar');
-        progressCont.style.display = 'block';
+        
+        if(progressCont) progressCont.style.display = 'block';
 
         for (let i = 0; i < total; i++) {
             const data = pendingUploads[i];
-            const percent = ((i + 1) / total) * 100;
-            progressBar.style.width = percent + "%";
+            if(progressBar) progressBar.style.width = ((i + 1) / total * 100) + "%";
 
-            // CONFLICT CHECK: First to Cloud wins
             const snapshot = await historyRef.orderByChild('barcode').equalTo(data.barcode).once('value');
             if (!snapshot.exists()) {
                 const newRef = historyRef.push();
@@ -58,8 +56,8 @@ async function processOfflineQueue() {
         }
 
         setTimeout(() => {
-            progressCont.style.display = 'none';
-            progressBar.style.width = '0%';
+            if(progressCont) progressCont.style.display = 'none';
+            if(progressBar) progressBar.style.width = '0%';
         }, 1200);
 
         pendingUploads = [];
@@ -92,7 +90,7 @@ db.ref('temporary_locks').on('value', (snap) => {
 
 // --- LOCKING LOGIC ---
 function attemptLock(barcode) {
-    const lockRef = db.ref('temporary_locks/' + barcode);
+    const lockRef = db.ref('temporary_locks/' + btoa(barcode).replace(/=/g, "")); 
     return lockRef.transaction((currentData) => {
         if (currentData === null || (Date.now() - currentData.time > 300000)) {
             return { user: loggedInUser, time: Date.now() };
@@ -102,7 +100,7 @@ function attemptLock(barcode) {
 
 function releaseLock(barcode) {
     if (barcode && isOnline) {
-        db.ref('temporary_locks/' + barcode).remove();
+        db.ref('temporary_locks/' + btoa(barcode).replace(/=/g, "")).remove();
     }
 }
 
@@ -166,6 +164,7 @@ function rebuildFilters() {
     });
     const b = document.getElementById('filterBuilding'), p = document.getElementById('filterProduction'),
           m = document.getElementById('filterMonth'), y = document.getElementById('filterYear');
+    if(!b || !p || !m || !y) return;
     b.innerHTML = '<option value="">All Buildings</option>';
     p.innerHTML = '<option value="">All Production</option>';
     m.innerHTML = '<option value="">All Months</option>';
@@ -190,7 +189,7 @@ function updateDisplay() {
     });
 
     const successScanned = scanHistory.filter(h => {
-        const m = masterDB[h.barcode] || {};
+        const m = masterDB[h.barcode.toUpperCase()] || {};
         return !h.isFail && (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf);
     }).length;
 
@@ -202,20 +201,20 @@ function updateDisplay() {
     document.getElementById('totalFails').innerText = scanHistory.filter(x => x.isFail).length;
 
     document.getElementById('inventoryBody').innerHTML = scanHistory
-        .filter(h => h.barcode.includes(s) || h.name.toUpperCase().includes(s))
+        .filter(h => h.barcode.toUpperCase().includes(s) || h.name.toUpperCase().includes(s))
         .map(i => `<tr class="${i.isFail ? 'row-fail' : ''}">
-        <td>${i.time}</td><td>${i.barcode}</td><td>${i.name}</td><td style="color:var(--primary)">${i.pic}</td>
+        <td>${i.time}</td><td style="word-break:break-all; font-size:10px;">${i.barcode}</td><td>${i.name}</td><td style="color:var(--primary)">${i.pic}</td>
         <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
         <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
         <td><span class="status-pill ${i.msaRes==='YES'?'pill-pass':'pill-fail'}">${i.msaRes}</span></td>
         <td>${i.remark}</td><td><button class="btn-delete-row" onclick="deleteRow('${i.cloudId}')">Del</button></td></tr>`).join('');
 
-    const scannedIds = new Set(scanHistory.map(x => x.barcode));
+    const scannedIds = new Set(scanHistory.map(x => x.barcode.toUpperCase()));
     document.getElementById('pendingBody').innerHTML = filteredTargetList.filter(c => {
         const item = masterDB[c];
         return !scannedIds.has(c) && (c.includes(s) || item.name.toUpperCase().includes(s));
     }).map(c => {
-        const lock = activeLocks[c];
+        const lock = activeLocks[btoa(c).replace(/=/g, "")];
         const lockStyle = lock ? 'style="background: rgba(168, 85, 247, 0.15); border-left: 3px solid #a855f7;"' : '';
         const lockTag = lock ? `<span style="color:#a855f7; font-size:10px;">🔒 ${lock.user}</span>` : '';
         return `<tr ${lockStyle}><td>${c} ${lockTag}</td><td>${masterDB[c].name}</td><td>${masterDB[c].loc}</td><td>${masterDB[c].due}</td><td>${masterDB[c].msa}</td></tr>`;
@@ -239,12 +238,14 @@ function animateGauge() {
     document.getElementById('progressPercent').innerText = Math.round(currentGaugeValue) + "%";
 }
 
-// --- SCAN HANDLING WITH COLLISION LOCK ---
+// --- UPDATED SCAN HANDLING FOR PLAIN TEXT / URL ---
 async function handleScannedCode(barcode) {
     if (!barcode) return;
+    const cleanCode = barcode.trim();
+    const lookupCode = cleanCode.toUpperCase();
 
     // 1. DUPLICATE CHECK
-    const existing = scanHistory.find(item => item.barcode === barcode);
+    const existing = scanHistory.find(item => item.barcode.toUpperCase() === lookupCode);
     if (existing) {
         document.getElementById('prevPIC').innerText = existing.pic;
         document.getElementById('prevTime').innerText = existing.time;
@@ -255,26 +256,43 @@ async function handleScannedCode(barcode) {
 
     // 2. COLLISION CHECK
     if (isOnline) {
-        const lock = activeLocks[barcode];
+        const lockKey = btoa(cleanCode).replace(/=/g, "");
+        const lock = activeLocks[lockKey];
         if (lock && lock.user !== loggedInUser) {
             alert(`COLLISION: ${lock.user} is currently auditing this!`);
             return;
         }
-        const lockRes = await attemptLock(barcode);
-        if (!lockRes.committed) return alert("System busy: Try again.");
+        await attemptLock(cleanCode);
     }
 
-    // 3. OPEN MODAL
-    const data = masterDB[barcode] || { name: "NOT IN DATABASE", loc: "N/A", due: "N/A", msa: "N/A" };
-    currentItem = { barcode, ...data };
+    // 3. ANALYZE CONTENT
+    const isUrl = cleanCode.toLowerCase().startsWith('http');
+    const masterInfo = masterDB[lookupCode];
+    
+    const data = masterInfo || { 
+        name: isUrl ? "EXTERNAL URL" : "UNREGISTERED QR/TEXT", 
+        loc: "N/A", due: "N/A", msa: "N/A" 
+    };
+
+    currentItem = { barcode: cleanCode, ...data };
+
+    // 4. OPEN MODAL
+    const urlButton = isUrl ? `<a href="${cleanCode}" target="_blank" style="color:#64ffda; font-size:12px; text-decoration:underline;">Open Link</a>` : '';
+    
     document.getElementById('modalDataBox').innerHTML = `
-        <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:var(--primary)">Code:</span> <span style="color:white; font-weight:bold;">${currentItem.barcode}</span></div>
-        <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
+        <div style="word-break: break-all; margin-bottom:10px;">
+            <span style="color:var(--primary); font-size:12px;">Scanned Content:</span><br>
+            <span style="color:white; font-weight:bold;">${cleanCode}</span> ${urlButton}
+        </div>
+        <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Equipment Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
         <div style="border-top: 1px solid #233554; margin: 8px 0; padding-top: 8px;"></div>
         <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Location:</span> <span style="color:white;">${currentItem.loc}</span></div>
         <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Due:</span> <span style="color:white;">${currentItem.due}</span></div>
     `;
-    setToggle('Loc', 'CORRECT'); setToggle('Due', 'VALID'); setToggle('Msa', 'YES');
+    
+    setToggle('Loc', masterInfo ? 'CORRECT' : 'WRONG'); 
+    setToggle('Due', masterInfo ? 'VALID' : 'EXPIRED'); 
+    setToggle('Msa', masterInfo ? 'YES' : 'NO');
     document.getElementById('qcModal').style.display = 'flex';
 }
 
@@ -296,7 +314,8 @@ function setToggle(type, val) {
 
 function submitQC() {
     if(!currentItem) return;
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || currentItem.name === "NOT IN DATABASE");
+    const isUnknown = currentItem.name.includes("UNREGISTERED") || currentItem.name.includes("EXTERNAL");
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || isUnknown);
     
     const auditData = {
         id: Date.now(), time: new Date().toLocaleTimeString(), 
@@ -310,7 +329,7 @@ function submitQC() {
         auditData.cloudId = newRef.key;
         newRef.set(auditData);
     } else {
-        alert("OFFLINE! Scan saved locally.");
+        alert("OFFLINE! Saved locally.");
         pendingUploads.push(auditData);
         localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
         scanHistory.unshift(auditData);
@@ -323,7 +342,8 @@ function closeModal() {
     if (currentItem) releaseLock(currentItem.barcode);
     document.getElementById('qcModal').style.display = 'none';
     document.getElementById('qcRemark').value = "";
-    currentItem = null; updateDisplay();
+    currentItem = null; 
+    updateDisplay();
     setTimeout(() => { document.getElementById('barcodeCollector').focus(); }, 100);
 }
 
@@ -334,7 +354,7 @@ function initScannerInput() {
             setTimeout(() => col.focus(), 50); 
         }
     });
-    col.addEventListener('keypress', (e) => { if (e.key === 'Enter') { handleScannedCode(col.value.trim().toUpperCase()); col.value = ""; } });
+    col.addEventListener('keypress', (e) => { if (e.key === 'Enter') { handleScannedCode(col.value); col.value = ""; } });
     col.focus();
 }
 
@@ -367,7 +387,7 @@ function exportToExcel() {
     if (!rawMasterRows.length) return alert("Load Master first");
     const dataRows = rawMasterRows.map((r, idx) => {
         if (idx === 0) return [...r, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
-        const s = scanHistory.find(h => h.barcode === r[0].toUpperCase());
+        const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
         return s ? [...r, "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...r, "PENDING", "", "", "", "", "", ""];
     });
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
@@ -384,7 +404,7 @@ function exportFilteredOnly() {
     rawMasterRows.slice(1).forEach(r => {
         const item = masterDB[r[0].toUpperCase()];
         if (item && (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf)) {
-            const s = scanHistory.find(h => h.barcode === r[0].toUpperCase());
+            const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
             dataRows.push(s ? [...r, "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...r, "PENDING", "", "", "", "", "", ""]);
         }
     });
@@ -398,9 +418,15 @@ async function toggleCamera() {
     if (!html5QrCode) {
         r.style.display = "block";
         html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start({ facingMode: "environment" }, { fps: 30, qrbox: 300 }, (text) => {
-            html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text.toUpperCase()); });
-        }).catch(err => alert("Camera Error: Use HTTPS and allow access."));
-    } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
+        const config = { fps: 30, qrbox: {width: 280, height: 200}, experimentalFeatures: {useBarCodeDetectorIfSupported: true} };
+        html5QrCode.start({ facingMode: "environment" }, config, (text) => {
+            html5QrCode.stop().then(() => { 
+                html5QrCode = null; 
+                r.style.display = "none"; 
+                handleScannedCode(text); 
+            });
+        }).catch(err => alert("Camera Error: Check HTTPS and permissions."));
+    } else { 
+        html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); 
+    }
 }
-
