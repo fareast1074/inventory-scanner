@@ -39,6 +39,7 @@
             <div style="display:flex; gap:8px;">
                 <button onclick="clearAllCloudData()" class="btn-logout" style="border: 1px solid var(--danger); color: var(--danger); background: rgba(255, 23, 68, 0.1);">Clear Cloud</button>
                 <button onclick="logout()" class="btn-logout">Logout & Clear</button>
+				
             </div>
         </div>
 
@@ -67,6 +68,9 @@
             <div style="display: flex; gap: 8px;">
                 <button onclick="resetFilters()" class="btn-filter-action">Reset</button>
                 <button onclick="exportFilteredOnly()" class="btn-excel">EXCEL</button>
+				<button class="btn-export-fail" onclick="exportFailuresOnly()" style="background: #ff1744; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-left: 5px;">
+    Export Failures
+</button>
             </div>
         </div>
 
