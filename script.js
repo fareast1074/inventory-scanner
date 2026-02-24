@@ -238,13 +238,10 @@ function animateGauge() {
     document.getElementById('progressPercent').innerText = Math.round(currentGaugeValue) + "%";
 }
 
-// --- UPDATED SCAN HANDLING FOR PLAIN TEXT / URL ---
 async function handleScannedCode(barcode) {
     if (!barcode) return;
     const cleanCode = barcode.trim();
     const lookupCode = cleanCode.toUpperCase();
-
-    // 1. DUPLICATE CHECK
     const existing = scanHistory.find(item => item.barcode.toUpperCase() === lookupCode);
     if (existing) {
         document.getElementById('prevPIC').innerText = existing.pic;
@@ -253,8 +250,6 @@ async function handleScannedCode(barcode) {
         setTimeout(() => document.getElementById('alertBanner').classList.remove('show'), 4000);
         return;
     }
-
-    // 2. COLLISION CHECK
     if (isOnline) {
         const lockKey = btoa(cleanCode).replace(/=/g, "");
         const lock = activeLocks[lockKey];
@@ -264,21 +259,11 @@ async function handleScannedCode(barcode) {
         }
         await attemptLock(cleanCode);
     }
-
-    // 3. ANALYZE CONTENT
     const isUrl = cleanCode.toLowerCase().startsWith('http');
     const masterInfo = masterDB[lookupCode];
-    
-    const data = masterInfo || { 
-        name: isUrl ? "EXTERNAL URL" : "UNREGISTERED QR/TEXT", 
-        loc: "N/A", due: "N/A", msa: "N/A" 
-    };
-
+    const data = masterInfo || { name: isUrl ? "EXTERNAL URL" : "UNREGISTERED QR/TEXT", loc: "N/A", due: "N/A", msa: "N/A" };
     currentItem = { barcode: cleanCode, ...data };
-
-    // 4. OPEN MODAL
     const urlButton = isUrl ? `<a href="${cleanCode}" target="_blank" style="color:#64ffda; font-size:12px; text-decoration:underline;">Open Link</a>` : '';
-    
     document.getElementById('modalDataBox').innerHTML = `
         <div style="word-break: break-all; margin-bottom:10px;">
             <span style="color:var(--primary); font-size:12px;">Scanned Content:</span><br>
@@ -289,7 +274,6 @@ async function handleScannedCode(barcode) {
         <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Location:</span> <span style="color:white;">${currentItem.loc}</span></div>
         <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Due:</span> <span style="color:white;">${currentItem.due}</span></div>
     `;
-    
     setToggle('Loc', masterInfo ? 'CORRECT' : 'WRONG'); 
     setToggle('Due', masterInfo ? 'VALID' : 'EXPIRED'); 
     setToggle('Msa', masterInfo ? 'YES' : 'NO');
@@ -315,15 +299,13 @@ function setToggle(type, val) {
 function submitQC() {
     if(!currentItem) return;
     const isUnknown = currentItem.name.includes("UNREGISTERED") || currentItem.name.includes("EXTERNAL");
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || isUnknown);
-    
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "NO" || isUnknown);
     const auditData = {
         id: Date.now(), time: new Date().toLocaleTimeString(), 
         barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
         locRes: selectedLoc, dueRes: selectedDue, msaRes: selectedMsa, 
         remark: document.getElementById('qcRemark').value || "-", isFail: failed
     };
-
     if (isOnline) {
         const newRef = db.ref('audit_history').push();
         auditData.cloudId = newRef.key;
@@ -383,12 +365,13 @@ function clearAllCloudData() {
     } else { alert("Unauthorized!"); }
 }
 
+// --- EXPORT FUNCTIONS ---
 function exportToExcel() {
     if (!rawMasterRows.length) return alert("Load Master first");
     const dataRows = rawMasterRows.map((r, idx) => {
         if (idx === 0) return [...r, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
         const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
-        return s ? [...r, "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...r, "PENDING", "", "", "", "", "", ""];
+        return s ? [...r, s.isFail ? "FAIL" : "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...r, "PENDING", "", "", "", "", "", ""];
     });
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Audit Report");
@@ -400,17 +383,43 @@ function exportFilteredOnly() {
     const pf = document.getElementById('filterProduction').value;
     const mf = document.getElementById('filterMonth').value;
     const yf = document.getElementById('filterYear').value;
+    const sTerm = document.getElementById('globalSearch').value.toUpperCase();
+
+    // Headers
     let dataRows = [[...rawMasterRows[0], "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"]];
+
+    // 1. Process Master Rows (Filtered)
     rawMasterRows.slice(1).forEach(r => {
         const item = masterDB[r[0].toUpperCase()];
         if (item && (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf)) {
             const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
-            dataRows.push(s ? [...r, "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...r, "PENDING", "", "", "", "", "", ""]);
+            if (s) {
+                // Add status and mark failure
+                const statusStr = s.isFail ? "!! FAIL !!" : "SCANNED";
+                dataRows.push([...r, statusStr, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+            } else {
+                dataRows.push([...r, "PENDING", "", "", "", "", "", ""]);
+            }
         }
     });
+
+    // 2. Add Unregistered/External Failures that match search
+    scanHistory.forEach(h => {
+        const isInMaster = masterDB[h.barcode.toUpperCase()];
+        if (!isInMaster && h.isFail) {
+            if (!sTerm || h.barcode.toUpperCase().includes(sTerm) || h.name.toUpperCase().includes(sTerm)) {
+                // Push failure with placeholder columns to match Master structure
+                dataRows.push([h.barcode, h.name, "EXTERNAL", "N/A", "N/A", "!! FAIL !!", h.time, h.pic, h.locRes, h.dueRes, h.msaRes, h.remark]);
+            }
+        }
+    });
+
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
+    
+    // Applying Yellow to Failures if using standard sheetjs (Limited support)
+    // We mark the status column clearly for the user.
     XLSX.utils.book_append_sheet(wb, ws, "Filtered Audit");
-    XLSX.writeFile(wb, `Filtered_Audit.xlsx`);
+    XLSX.writeFile(wb, `Filtered_Audit_Report.xlsx`);
 }
 
 async function toggleCamera() {
