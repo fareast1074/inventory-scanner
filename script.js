@@ -368,10 +368,12 @@ function clearAllCloudData() {
 // --- EXPORT FUNCTIONS ---
 function exportToExcel() {
     if (!rawMasterRows.length) return alert("Load Master first");
+    const cleanHeader = rawMasterRows[0].slice(0, 5);
     const dataRows = rawMasterRows.map((r, idx) => {
-        if (idx === 0) return [...r, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+        const baseRow = r.slice(0, 5);
+        if (idx === 0) return [...cleanHeader, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
         const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
-        return s ? [...r, s.isFail ? "FAIL" : "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...r, "PENDING", "", "", "", "", "", ""];
+        return s ? [...baseRow, s.isFail ? "FAIL" : "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...baseRow, "PENDING", "", "", "", "", "", ""];
     });
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Audit Report");
@@ -385,39 +387,35 @@ function exportFilteredOnly() {
     const yf = document.getElementById('filterYear').value;
     const sTerm = document.getElementById('globalSearch').value.toUpperCase();
 
-    // Headers
-    let dataRows = [[...rawMasterRows[0], "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"]];
+    // FIXED: Only take first 5 columns to prevent gaps
+    const cleanHeader = rawMasterRows[0].slice(0, 5);
+    let dataRows = [[...cleanHeader, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"]];
 
-    // 1. Process Master Rows (Filtered)
     rawMasterRows.slice(1).forEach(r => {
         const item = masterDB[r[0].toUpperCase()];
+        const baseRow = r.slice(0, 5);
         if (item && (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf)) {
             const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
             if (s) {
-                // Add status and mark failure
                 const statusStr = s.isFail ? "!! FAIL !!" : "SCANNED";
-                dataRows.push([...r, statusStr, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+                dataRows.push([...baseRow, statusStr, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
             } else {
-                dataRows.push([...r, "PENDING", "", "", "", "", "", ""]);
+                dataRows.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
             }
         }
     });
 
-    // 2. Add Unregistered/External Failures that match search
+    // Add Unregistered/External Failures
     scanHistory.forEach(h => {
         const isInMaster = masterDB[h.barcode.toUpperCase()];
         if (!isInMaster && h.isFail) {
             if (!sTerm || h.barcode.toUpperCase().includes(sTerm) || h.name.toUpperCase().includes(sTerm)) {
-                // Push failure with placeholder columns to match Master structure
                 dataRows.push([h.barcode, h.name, "EXTERNAL", "N/A", "N/A", "!! FAIL !!", h.time, h.pic, h.locRes, h.dueRes, h.msaRes, h.remark]);
             }
         }
     });
 
     const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
-    
-    // Applying Yellow to Failures if using standard sheetjs (Limited support)
-    // We mark the status column clearly for the user.
     XLSX.utils.book_append_sheet(wb, ws, "Filtered Audit");
     XLSX.writeFile(wb, `Filtered_Audit_Report.xlsx`);
 }
