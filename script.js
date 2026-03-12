@@ -22,17 +22,16 @@ let selectedMsa = "YES";
 // --- CONNECTION HEARTBEAT & SYNC ---
 db.ref(".info/connected").on("value", (snap) => {
     isOnline = snap.val() === true;
+    const syncIcon = document.getElementById('syncStatus');
     if (isOnline) {
-        syncIcon.style.background = "#00e676";
-        syncIcon.style.boxShadow = "0 0 10px #00e676";
+        syncIcon.style.background = "#2e7d32"; 
+        syncIcon.style.boxShadow = "0 0 10px rgba(46, 125, 50, 0.4)";
         processOfflineQueue();
     } else {
-        syncIcon.style.background = "#ff1744";
-        syncIcon.style.boxShadow = "0 0 10px #ff1744";
+        syncIcon.style.background = "#d32f2f"; 
+        syncIcon.style.boxShadow = "0 0 10px rgba(211, 47, 47, 0.4)";
     }
 });
-
-const syncIcon = document.getElementById('syncStatus');
 
 async function processOfflineQueue() {
     if (pendingUploads.length > 0 && isOnline) {
@@ -117,8 +116,22 @@ function checkLogin() {
     } else { alert("Invalid Credentials"); }
 }
 
-function logout() {
-    if(confirm("Logout?")) { location.reload(); }
+async function logout() {
+    if(confirm("Logout and Reset Scan Session? (Master List will be saved)")) { 
+        // 1. Clear audit history from Cloud
+        await db.ref('audit_history').remove();
+        
+        // 2. Clear all temporary locks
+        await db.ref('temporary_locks').remove();
+
+        // 3. Clear local offline data
+        localStorage.removeItem('pending_queue');
+        pendingUploads = [];
+        scanHistory = [];
+
+        // 4. Reload the app
+        location.reload(); 
+    }
 }
 
 function loadMasterData(input) {
@@ -215,12 +228,13 @@ function updateDisplay() {
         return !scannedIds.has(c) && (c.includes(s) || item.name.toUpperCase().includes(s));
     }).map(c => {
         const lock = activeLocks[btoa(c).replace(/=/g, "")];
-        const lockStyle = lock ? 'style="background: rgba(168, 85, 247, 0.15); border-left: 3px solid #a855f7;"' : '';
-        const lockTag = lock ? `<span style="color:#a855f7; font-size:10px;">🔒 ${lock.user}</span>` : '';
+        const lockStyle = lock ? 'style="background: rgba(121, 85, 72, 0.1); border-left: 3px solid #795548;"' : '';
+        const lockTag = lock ? `<span style="color:#795548; font-size:10px;">🔒 ${lock.user}</span>` : '';
         return `<tr ${lockStyle}><td>${c} ${lockTag}</td><td>${masterDB[c].name}</td><td>${masterDB[c].loc}</td><td>${masterDB[c].due}</td><td>${masterDB[c].msa}</td></tr>`;
     }).join('');
 }
 
+// --- REPAIRED GAUGE ANIMATION FOR WOOD THEME ---
 function drawGauge(percent) { targetGaugeValue = percent; animateGauge(); }
 
 function animateGauge() {
@@ -231,11 +245,18 @@ function animateGauge() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 100, 100);
-    ctx.beginPath(); ctx.arc(50, 50, 42, 0, 2 * Math.PI); ctx.strokeStyle = '#0a192f'; ctx.lineWidth = 10; ctx.stroke();
+    
+    ctx.beginPath(); ctx.arc(50, 50, 42, 0, 2 * Math.PI); ctx.strokeStyle = '#efebe9'; ctx.lineWidth = 10; ctx.stroke();
+    
     const startAngle = -0.5 * Math.PI;
     const endAngle = (currentGaugeValue / 100) * (2 * Math.PI) + startAngle;
-    ctx.beginPath(); ctx.arc(50, 50, 42, startAngle, endAngle); ctx.strokeStyle = '#00e676'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
-    document.getElementById('progressPercent').innerText = Math.round(currentGaugeValue) + "%";
+    ctx.beginPath(); ctx.arc(50, 50, 42, startAngle, endAngle); ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+    
+    const pText = document.getElementById('progressPercent');
+    if(pText) {
+        pText.innerText = Math.round(currentGaugeValue) + "%";
+        pText.style.color = '#2e7d32';
+    }
 }
 
 async function handleScannedCode(barcode) {
@@ -263,16 +284,16 @@ async function handleScannedCode(barcode) {
     const masterInfo = masterDB[lookupCode];
     const data = masterInfo || { name: isUrl ? "EXTERNAL URL" : "UNREGISTERED QR/TEXT", loc: "N/A", due: "N/A", msa: "N/A" };
     currentItem = { barcode: cleanCode, ...data };
-    const urlButton = isUrl ? `<a href="${cleanCode}" target="_blank" style="color:#64ffda; font-size:12px; text-decoration:underline;">Open Link</a>` : '';
+    const urlButton = isUrl ? `<a href="${cleanCode}" target="_blank" style="color:#5d4037; font-size:12px; text-decoration:underline;">Open Link</a>` : '';
     document.getElementById('modalDataBox').innerHTML = `
         <div style="word-break: break-all; margin-bottom:10px;">
-            <span style="color:var(--primary); font-size:12px;">Scanned Content:</span><br>
-            <span style="color:white; font-weight:bold;">${cleanCode}</span> ${urlButton}
+            <span style="color:var(--text-muted); font-size:12px;">Scanned Content:</span><br>
+            <span style="color:var(--primary); font-weight:bold;">${cleanCode}</span> ${urlButton}
         </div>
-        <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--primary)">Equipment Name:</span> <span style="color:white; font-weight:bold;">${currentItem.name}</span></div>
-        <div style="border-top: 1px solid #233554; margin: 8px 0; padding-top: 8px;"></div>
-        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Location:</span> <span style="color:white;">${currentItem.loc}</span></div>
-        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--primary)">Reg. Due:</span> <span style="color:white;">${currentItem.due}</span></div>
+        <div style="display:flex; justify-content:space-between; margin:4px 0;"><span style="color:var(--text-muted)">Equipment Name:</span> <span style="color:var(--primary); font-weight:bold;">${currentItem.name}</span></div>
+        <div style="border-top: 1px solid var(--border-color); margin: 8px 0; padding-top: 8px;"></div>
+        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--text-muted)">Reg. Location:</span> <span style="color:var(--primary);">${currentItem.loc}</span></div>
+        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--text-muted)">Reg. Due:</span> <span style="color:var(--primary);">${currentItem.due}</span></div>
     `;
     setToggle('Loc', masterInfo ? 'CORRECT' : 'WRONG'); 
     setToggle('Due', masterInfo ? 'VALID' : 'EXPIRED'); 
@@ -299,7 +320,7 @@ function setToggle(type, val) {
 function submitQC() {
     if(!currentItem) return;
     const isUnknown = currentItem.name.includes("UNREGISTERED") || currentItem.name.includes("EXTERNAL");
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "NO" || isUnknown);
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || isUnknown);
     const auditData = {
         id: Date.now(), time: new Date().toLocaleTimeString(), 
         barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
@@ -356,16 +377,16 @@ function deleteRow(cloudId) {
 function clearAllCloudData() {
     const inputPass = prompt("Enter ADMIN PASSWORD:");
     if (inputPass === MASTER_PASS) {
-        if (confirm("Delete EVERYTHING?")) {
+        if (confirm("Delete EVERYTHING (Master + History)?")) {
             db.ref('audit_history').remove();
             db.ref('master_list').remove();
             db.ref('temporary_locks').remove();
+            localStorage.removeItem('pending_queue');
             location.reload();
         }
     } else { alert("Unauthorized!"); }
 }
 
-// --- EXPORT FUNCTIONS ---
 function exportToExcel() {
     if (!rawMasterRows.length) return alert("Load Master first");
     const cleanHeader = rawMasterRows[0].slice(0, 5);
@@ -387,7 +408,6 @@ function exportFilteredOnly() {
     const yf = document.getElementById('filterYear').value;
     const sTerm = document.getElementById('globalSearch').value.toUpperCase();
 
-    // FIXED: Only take first 5 columns to prevent gaps
     const cleanHeader = rawMasterRows[0].slice(0, 5);
     let dataRows = [[...cleanHeader, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"]];
 
@@ -405,7 +425,6 @@ function exportFilteredOnly() {
         }
     });
 
-    // Add Unregistered/External Failures
     scanHistory.forEach(h => {
         const isInMaster = masterDB[h.barcode.toUpperCase()];
         if (!isInMaster && h.isFail) {
