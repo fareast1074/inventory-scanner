@@ -39,7 +39,6 @@
             <div style="display:flex; gap:8px;">
                 <button onclick="clearAllCloudData()" class="btn-logout" style="border: 1px solid var(--danger); color: var(--danger); background: rgba(255, 23, 68, 0.1);">Clear Cloud</button>
                 <button onclick="logout()" class="btn-logout">Logout & Clear</button>
-				
             </div>
         </div>
 
@@ -68,9 +67,9 @@
             <div style="display: flex; gap: 8px;">
                 <button onclick="resetFilters()" class="btn-filter-action">Reset</button>
                 <button onclick="exportFilteredOnly()" class="btn-excel">EXCEL</button>
-				
             </div>
         </div>
+		
 
         <div class="stats-bar">
             <div class="stat-card"><span id="totalScans" class="stat-val">0</span><span class="stat-lbl">Items Scanned</span></div>
@@ -80,6 +79,14 @@
         <div style="display:flex; gap:10px; margin-bottom:15px;">
             <button onclick="toggleCamera()" class="btn-camera">📷 CAMERA SCAN</button>
             <button onclick="exportToExcel()" class="btn-full-report">📥 FULL EXCEL REPORT</button>
+            <div class="manual-entry-container" style="margin: 10px 0; display: flex; gap: 8px;">
+                <input type="text" id="manualBarcode" placeholder="Enter Barcode Manually..." 
+                       style="flex-grow: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <button onclick="submitManualEntry()" 
+                        style="padding: 0 20px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer;">
+                    Go
+                </button>
+            </div>
         </div>
 
         <div id="reader"></div>
@@ -89,7 +96,7 @@
         <div class="table-container">
             <table>
                 <thead>
-                    <tr><th>Time</th><th>Code</th><th>Name</th><th>Auditor</th><th>Loc</th><th>Due</th><th>MSA</th><th>Remark</th><th>Action</th></tr>
+                    <tr><th>Time</th><th>Code</th><th>Name</th><th>PIC</th><th>Location</th><th>Due</th><th>Status</th><th>MSA</th><th>Remark</th><th>Action</th></tr>
                 </thead>
                 <tbody id="inventoryBody"></tbody>
             </table>
@@ -99,7 +106,7 @@
         <div class="table-container" style="background: rgba(10, 25, 47, 0.4);">
             <table>
                 <thead>
-                    <tr><th>Code</th><th>Name</th><th>Loc</th><th>Due</th><th>MSA</th></tr>
+                    <tr><th>Code</th><th>Name</th><th>Loc</th><th>Due</th><th>Status</th><th>MSA</th></tr>
                 </thead>
                 <tbody id="pendingBody"></tbody>
             </table>
@@ -125,15 +132,36 @@
                 </div>
                 <div class="audit-row"><label>MSA Sticker</label>
                     <div class="option-group">
-                        <button class="option-btn" id="btnMsaYes" onclick="setToggle('Msa', 'YES')">YES</button>
-                        <button class="option-btn" id="btnMsaNo" onclick="setToggle('Msa', 'NO')">NO</button>
+                        <button id="btnMsaYes" onclick="setToggle('Msa', 'YES')" class="option-btn">YES</button>
+                        <button id="btnMsaNo" onclick="setToggle('Msa', 'NO')" class="option-btn">NO</button>
                     </div>
                 </div>
             </div>
-            <input type="text" id="qcRemark" class="remark-input" placeholder="Remark...">
-            <div style="display: flex; gap: 10px;">
-                <button class="btn-save" style="flex: 2;" onclick="submitQC()">SAVE AUDIT RECORD</button>
-                <button onclick="closeModal()" class="btn-cancel">Cancel</button>
+            <div style="margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color:var(--text-muted); font-size:12px;">Remarks:</span>
+                    <span onclick="document.getElementById('qcRemark').value=''" 
+                          style="color:var(--danger); font-size:10px; cursor:pointer; text-decoration: underline;">
+                          Clear Entry
+                    </span>
+                </div>
+                <input type="text" id="qcRemark" list="remarkOptions" placeholder="Select an option or type manually..." 
+                       style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid var(--border-color); box-sizing: border-box;">
+                <datalist id="remarkOptions">
+                    <option value="Damaged Label">
+                    <option value="System not tally">
+                    <option value="Location not match">
+                    <option value="Wrong due date">
+                    <option value="Missing due date sticker">
+                </datalist>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn-save" style="flex: 2; cursor: pointer;" onclick="submitQC()">
+                    SAVE AUDIT RECORD
+                </button>
+                <button onclick="closeModal()" class="btn-cancel" style="flex: 1; cursor: pointer;">
+                    Cancel
+                </button>
             </div>
         </div>
     </div>
@@ -158,4 +186,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
