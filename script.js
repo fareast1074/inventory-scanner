@@ -330,7 +330,7 @@ function setToggle(type, val) {
 
 function submitQC() {
     if(!currentItem) return;
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "NO" || currentItem.isUnregistered);
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || currentItem.isUnregistered);
     const auditData = {
         id: Date.now(), time: new Date().toLocaleTimeString(), 
         barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
