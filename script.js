@@ -17,7 +17,7 @@ let isOnline = false;
 
 let selectedLoc = "CORRECT";
 let selectedDue = "VALID";
-let selectedMsa = "YES";
+let selectedMsa = "NO";
 
 // --- CONNECTION HEARTBEAT & SYNC ---
 db.ref(".info/connected").on("value", (snap) => {
@@ -118,18 +118,11 @@ function checkLogin() {
 
 async function logout() {
     if(confirm("Logout and Reset Scan Session? (Master List will be saved)")) { 
-        // 1. Clear audit history from Cloud
         await db.ref('audit_history').remove();
-        
-        // 2. Clear all temporary locks
         await db.ref('temporary_locks').remove();
-
-        // 3. Clear local offline data
         localStorage.removeItem('pending_queue');
         pendingUploads = [];
         scanHistory = [];
-
-        // 4. Reload the app
         location.reload(); 
     }
 }
@@ -157,9 +150,15 @@ function loadMasterData(input) {
             columns[3] = dateCol;
             newRawRows.push(columns);
             newMasterDB[columns[0].toUpperCase()] = { 
-                name: columns[1]||"UNKNOWN", loc: fullLoc, 
-                bldg: (locParts[0] || "N/A").trim(), prod: (locParts[1] || "N/A").trim(), 
-                due: dateCol, msa: columns[4]||"N/A", month: m, year: y
+                name: columns[1]||"UNKNOWN", 
+                loc: fullLoc, 
+                bldg: (locParts[0] || "N/A").trim(), 
+                prod: (locParts[1] || "N/A").trim(), 
+                due: dateCol, 
+                status: columns[4]||"N/A", 
+                msa: columns[5]||"N/A",    
+                month: m, 
+                year: y
             };
         });
         db.ref('master_list').set({ masterDB: newMasterDB, rawMasterRows: newRawRows });
@@ -215,12 +214,21 @@ function updateDisplay() {
 
     document.getElementById('inventoryBody').innerHTML = scanHistory
         .filter(h => h.barcode.toUpperCase().includes(s) || h.name.toUpperCase().includes(s))
-        .map(i => `<tr class="${i.isFail ? 'row-fail' : ''}">
-        <td>${i.time}</td><td style="word-break:break-all; font-size:10px;">${i.barcode}</td><td>${i.name}</td><td style="color:var(--primary)">${i.pic}</td>
-        <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
-        <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
-        <td><span class="status-pill ${i.msaRes==='YES'?'pill-pass':'pill-fail'}">${i.msaRes}</span></td>
-        <td>${i.remark}</td><td><button class="btn-delete-row" onclick="deleteRow('${i.cloudId}')">Del</button></td></tr>`).join('');
+        .map(i => {
+            const originalStatus = (masterDB[i.barcode.toUpperCase()] || {}).status || "N/A";
+            return `<tr class="${i.isFail ? 'row-fail' : ''}">
+                <td>${i.time}</td>
+                <td style="word-break:break-all; font-size:10px;">${i.barcode}</td>
+                <td>${i.name}</td>
+                <td style="color:var(--primary)">${i.pic}</td>
+                <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
+                <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
+                <td>${originalStatus}</td>
+                <td><span class="status-pill ${i.msaRes==='YES'?'pill-pass':'pill-fail'}">${i.msaRes}</span></td>
+                <td>${i.remark}</td>
+                <td><button class="btn-delete-row" onclick="deleteRow('${i.cloudId}')">Del</button></td>
+            </tr>`;
+        }).join('');
 
     const scannedIds = new Set(scanHistory.map(x => x.barcode.toUpperCase()));
     document.getElementById('pendingBody').innerHTML = filteredTargetList.filter(c => {
@@ -230,11 +238,17 @@ function updateDisplay() {
         const lock = activeLocks[btoa(c).replace(/=/g, "")];
         const lockStyle = lock ? 'style="background: rgba(121, 85, 72, 0.1); border-left: 3px solid #795548;"' : '';
         const lockTag = lock ? `<span style="color:#795548; font-size:10px;">🔒 ${lock.user}</span>` : '';
-        return `<tr ${lockStyle}><td>${c} ${lockTag}</td><td>${masterDB[c].name}</td><td>${masterDB[c].loc}</td><td>${masterDB[c].due}</td><td>${masterDB[c].msa}</td></tr>`;
+        return `<tr ${lockStyle}>
+            <td>${c} ${lockTag}</td>
+            <td>${masterDB[c].name}</td>
+            <td>${masterDB[c].loc}</td>
+            <td>${masterDB[c].due}</td>
+            <td>${masterDB[c].status}</td>
+            <td>${masterDB[c].msa}</td>
+        </tr>`;
     }).join('');
 }
 
-// --- REPAIRED GAUGE ANIMATION FOR WOOD THEME ---
 function drawGauge(percent) { targetGaugeValue = percent; animateGauge(); }
 
 function animateGauge() {
@@ -245,18 +259,12 @@ function animateGauge() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, 100, 100);
-    
     ctx.beginPath(); ctx.arc(50, 50, 42, 0, 2 * Math.PI); ctx.strokeStyle = '#efebe9'; ctx.lineWidth = 10; ctx.stroke();
-    
     const startAngle = -0.5 * Math.PI;
     const endAngle = (currentGaugeValue / 100) * (2 * Math.PI) + startAngle;
     ctx.beginPath(); ctx.arc(50, 50, 42, startAngle, endAngle); ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
-    
     const pText = document.getElementById('progressPercent');
-    if(pText) {
-        pText.innerText = Math.round(currentGaugeValue) + "%";
-        pText.style.color = '#2e7d32';
-    }
+    if(pText) { pText.innerText = Math.round(currentGaugeValue) + "%"; pText.style.color = '#2e7d32'; }
 }
 
 async function handleScannedCode(barcode) {
@@ -282,8 +290,8 @@ async function handleScannedCode(barcode) {
     }
     const isUrl = cleanCode.toLowerCase().startsWith('http');
     const masterInfo = masterDB[lookupCode];
-    const data = masterInfo || { name: isUrl ? "EXTERNAL URL" : "UNREGISTERED QR/TEXT", loc: "N/A", due: "N/A", msa: "N/A" };
-    currentItem = { barcode: cleanCode, ...data };
+    const data = masterInfo || { name: isUrl ? "EXTERNAL URL" : "UNREGISTERED QR/TEXT", loc: "N/A", due: "N/A", status: "N/A", msa: "N/A" };
+    currentItem = { barcode: cleanCode, ...data, isUnregistered: !masterInfo };
     const urlButton = isUrl ? `<a href="${cleanCode}" target="_blank" style="color:#5d4037; font-size:12px; text-decoration:underline;">Open Link</a>` : '';
     document.getElementById('modalDataBox').innerHTML = `
         <div style="word-break: break-all; margin-bottom:10px;">
@@ -294,6 +302,7 @@ async function handleScannedCode(barcode) {
         <div style="border-top: 1px solid var(--border-color); margin: 8px 0; padding-top: 8px;"></div>
         <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--text-muted)">Reg. Location:</span> <span style="color:var(--primary);">${currentItem.loc}</span></div>
         <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--text-muted)">Reg. Due:</span> <span style="color:var(--primary);">${currentItem.due}</span></div>
+        <div style="display:flex; justify-content:space-between; margin:2px 0;"><span style="color:var(--text-muted)">Current Status:</span> <span style="color:var(--primary); font-weight:bold;">${currentItem.status}</span></div>
     `;
     setToggle('Loc', masterInfo ? 'CORRECT' : 'WRONG'); 
     setToggle('Due', masterInfo ? 'VALID' : 'EXPIRED'); 
@@ -319,13 +328,14 @@ function setToggle(type, val) {
 
 function submitQC() {
     if(!currentItem) return;
-    const isUnknown = currentItem.name.includes("UNREGISTERED") || currentItem.name.includes("EXTERNAL");
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || isUnknown);
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "NO" || currentItem.isUnregistered);
     const auditData = {
         id: Date.now(), time: new Date().toLocaleTimeString(), 
         barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
         locRes: selectedLoc, dueRes: selectedDue, msaRes: selectedMsa, 
-        remark: document.getElementById('qcRemark').value || "-", isFail: failed
+        remark: document.getElementById('qcRemark').value || "-", 
+        isFail: failed, 
+        isUnregistered: currentItem.isUnregistered
     };
     if (isOnline) {
         const newRef = db.ref('audit_history').push();
@@ -387,18 +397,46 @@ function clearAllCloudData() {
     } else { alert("Unauthorized!"); }
 }
 
+// --- UPDATED EXCEL EXPORT LOGIC (WITH SEPARATE UNREGISTERED SHEET) ---
 function exportToExcel() {
-    if (!rawMasterRows.length) return alert("Load Master first");
-    const cleanHeader = rawMasterRows[0].slice(0, 5);
-    const dataRows = rawMasterRows.map((r, idx) => {
-        const baseRow = r.slice(0, 5);
-        if (idx === 0) return [...cleanHeader, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
-        const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
-        return s ? [...baseRow, s.isFail ? "FAIL" : "SCANNED", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark] : [...baseRow, "PENDING", "", "", "", "", "", ""];
+    if (!rawMasterRows.length && scanHistory.length === 0) return alert("No data to export");
+
+    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+    let auditData = [auditHeader];
+    let unregisteredData = [auditHeader];
+
+    const scannedCodesInMaster = new Set();
+    
+    // 1. Process Master Rows (Sheet 1)
+    rawMasterRows.slice(1).forEach(r => {
+        const code = r[0].toUpperCase();
+        const baseRow = r.slice(0, 6);
+        const s = scanHistory.find(h => h.barcode.toUpperCase() === code);
+        
+        if (s) {
+            scannedCodesInMaster.add(code);
+            const statusLabel = s.isFail ? "FAIL (AUDIT)" : "SCANNED";
+            auditData.push([...baseRow, statusLabel, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+        } else {
+            auditData.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
+        }
     });
-    const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Audit Report");
-    XLSX.writeFile(wb, `Audit_Report.xlsx`);
+
+    // 2. Process Unregistered Items (Sheet 2)
+    scanHistory.forEach(s => {
+        const lookupCode = s.barcode.toUpperCase();
+        if (!masterDB[lookupCode]) {
+            unregisteredData.push([
+                s.barcode, s.name, "N/A", "N/A", "UNREGISTERED", "N/A", 
+                "FAIL (UNREGISTERED)", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark
+            ]);
+        }
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), "Audit Report");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(unregisteredData), "Unregistered Items");
+    XLSX.writeFile(wb, `Audit_Report_Full.xlsx`);
 }
 
 function exportFilteredOnly() {
@@ -406,37 +444,40 @@ function exportFilteredOnly() {
     const pf = document.getElementById('filterProduction').value;
     const mf = document.getElementById('filterMonth').value;
     const yf = document.getElementById('filterYear').value;
-    const sTerm = document.getElementById('globalSearch').value.toUpperCase();
 
-    const cleanHeader = rawMasterRows[0].slice(0, 5);
-    let dataRows = [[...cleanHeader, "Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"]];
+    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+    let auditData = [auditHeader];
+    let unregisteredData = [auditHeader];
 
     rawMasterRows.slice(1).forEach(r => {
-        const item = masterDB[r[0].toUpperCase()];
-        const baseRow = r.slice(0, 5);
+        const code = r[0].toUpperCase();
+        const item = masterDB[code];
+        const baseRow = r.slice(0, 6);
+
         if (item && (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf)) {
-            const s = scanHistory.find(h => h.barcode.toUpperCase() === r[0].toUpperCase());
+            const s = scanHistory.find(h => h.barcode.toUpperCase() === code);
             if (s) {
-                const statusStr = s.isFail ? "!! FAIL !!" : "SCANNED";
-                dataRows.push([...baseRow, statusStr, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+                const statusLabel = s.isFail ? "FAIL (AUDIT)" : "SCANNED";
+                auditData.push([...baseRow, statusLabel, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
             } else {
-                dataRows.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
+                auditData.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
             }
         }
     });
 
-    scanHistory.forEach(h => {
-        const isInMaster = masterDB[h.barcode.toUpperCase()];
-        if (!isInMaster && h.isFail) {
-            if (!sTerm || h.barcode.toUpperCase().includes(sTerm) || h.name.toUpperCase().includes(sTerm)) {
-                dataRows.push([h.barcode, h.name, "EXTERNAL", "N/A", "N/A", "!! FAIL !!", h.time, h.pic, h.locRes, h.dueRes, h.msaRes, h.remark]);
-            }
+    scanHistory.forEach(s => {
+        if (!masterDB[s.barcode.toUpperCase()]) {
+             unregisteredData.push([
+                s.barcode, s.name, "N/A", "N/A", "UNREGISTERED", "N/A", 
+                "FAIL (UNREGISTERED)", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark
+            ]);
         }
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(dataRows), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Filtered Audit");
-    XLSX.writeFile(wb, `Filtered_Audit_Report.xlsx`);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), "Filtered Audit");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(unregisteredData), "Filtered Unregistered");
+    XLSX.writeFile(wb, `Audit_Report_Filtered.xlsx`);
 }
 
 async function toggleCamera() {
@@ -444,15 +485,9 @@ async function toggleCamera() {
     if (!html5QrCode) {
         r.style.display = "block";
         html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 30, qrbox: {width: 280, height: 200}, experimentalFeatures: {useBarCodeDetectorIfSupported: true} };
+        const config = { fps: 30, qrbox: {width: 280, height: 200} };
         html5QrCode.start({ facingMode: "environment" }, config, (text) => {
-            html5QrCode.stop().then(() => { 
-                html5QrCode = null; 
-                r.style.display = "none"; 
-                handleScannedCode(text); 
-            });
+            html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text); });
         }).catch(err => alert("Camera Error: Check HTTPS and permissions."));
-    } else { 
-        html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); 
-    }
+    } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
 }
