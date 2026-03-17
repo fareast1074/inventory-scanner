@@ -110,7 +110,7 @@ body {
 }
 
 .btn-filter-action { padding:0 10px; background:var(--accent); color:white; border:none; border-radius:4px; cursor:pointer; }
-.btn-excel { padding:0 10px; background:var(--primary); color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; }
+.btn-excel { padding:0 10px; background:var(--accent); color:white; border:none; border-radius:4px; cursor:pointer; }
 
 .stats-bar { display: flex; gap: 15px; margin-bottom: 15px; }
 .stat-card { flex: 1; background: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); text-align: center; }
