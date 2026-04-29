@@ -6,6 +6,7 @@
     <title>GRID | Calibration Inventory System</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,14 +43,28 @@
             </div>
         </div>
 
-        <div class="progress-container" onclick="document.getElementById('pendingBody').scrollIntoView({behavior:'smooth'})">
-            <div style="position: relative; width: 100px; height: 100px;">
-                <canvas id="gaugeCanvas" width="100" height="100"></canvas>
-                <div id="progressPercent" class="gauge-text">0%</div>
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <div class="progress-container" style="flex: 1; margin-bottom: 0;" onclick="document.getElementById('pendingBody').scrollIntoView({behavior:'smooth'})">
+                <div style="position: relative; width: 100px; height: 100px;">
+                    <canvas id="gaugeCanvas" width="100" height="100"></canvas>
+                    <div id="progressPercent" class="gauge-text">0%</div>
+                </div>
+                <div style="flex: 1;">
+                    <div id="progressLabel" style="color: var(--success); font-size: 0.9em; font-weight: bold;">CALIBRATION PROGRESS</div>
+                    <div id="progressSubLabel" style="color: #8892b0; font-size: 0.8em; margin-top: 4px;">Success: 0 / 0</div>
+                </div>
             </div>
-            <div style="flex: 1;">
-                <div id="progressLabel" style="color: var(--success); font-size: 0.9em; font-weight: bold;">CALIBRATION PROGRESS</div>
-                <div id="progressSubLabel" style="color: #8892b0; font-size: 0.8em; margin-top: 4px;">Success: 0 / 0</div>
+
+            <div class="progress-container" style="flex: 1.2; margin-bottom: 0; min-height: 120px;">
+                <div style="width: 80px; height: 80px;">
+                    <canvas id="failureChart"></canvas>
+                </div>
+                <div style="flex: 1; margin-left: 10px;">
+                    <div style="color: var(--danger); font-size: 0.9em; font-weight: bold;">FAILURE ANALYSIS</div>
+                    <div id="failureLegend" style="font-size: 0.7em; color: #8892b0; margin-top: 5px; line-height: 1.3;">
+                        No remarks recorded.
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -67,10 +82,10 @@
             <div style="display: flex; gap: 8px;">
                 <button onclick="resetFilters()" class="btn-filter-action">Reset</button>
                 <button onclick="exportFilteredOnly()" class="btn-excel">Excel</button>
-				<button onclick="logout()" class="btn-logout">Logout & Clear</button>
+                <button onclick="logout()" class="btn-logout">Logout & Clear</button>
             </div>
         </div>
-		
+        
 
         <div class="stats-bar">
             <div class="stat-card"><span id="totalScans" class="stat-val">0</span><span class="stat-lbl">Items Scanned</span></div>
@@ -88,6 +103,8 @@
                     Go
                 </button>
             </div>
+            
+            
         </div>
 
         <div id="reader"></div>
@@ -137,6 +154,7 @@
                         <button id="btnMsaNo" onclick="setToggle('Msa', 'NO')" class="option-btn">NO</button>
                     </div>
                 </div>
+
             </div>
             <div style="margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -149,11 +167,13 @@
                 <input type="text" id="qcRemark" list="remarkOptions" placeholder="Select an option or type manually..." 
                        style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid var(--border-color); box-sizing: border-box;">
                 <datalist id="remarkOptions">
+                    <option value="Missing due date sticker">
                     <option value="Damaged Label">
+                    <option value="Found from missing">
                     <option value="System not tally">
                     <option value="Location not match">
                     <option value="Wrong due date">
-                    <option value="Missing due date sticker">
+                    
                 </datalist>
             </div>
             <div style="display: flex; gap: 10px; margin-top: 20px;">
