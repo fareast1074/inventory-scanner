@@ -21,6 +21,9 @@ let selectedLoc = "CORRECT";
 let selectedDue = "VALID";
 let selectedMsa = "NO";
 
+// NEW: Store Chart Instance
+let failureChartInstance = null;
+
 // --- CONNECTION HEARTBEAT & SYNC ---
 db.ref(".info/connected").on("value", (snap) => {
     isOnline = snap.val() === true;
@@ -48,7 +51,7 @@ async function processOfflineQueue() {
 
         for (let i = 0; i < total; i++) {
             const data = pendingUploads[i];
-            if(progressBar) progressBar.style.width = ((i + 1) / total * 100) + "%";
+            if(progressBar) progressBar.width = ((i + 1) / total * 100) + "%";
 
             const snapshot = await historyRef.orderByChild('barcode').equalTo(data.barcode).once('value');
             if (!snapshot.exists()) {
@@ -93,7 +96,8 @@ db.ref('temporary_locks').on('value', (snap) => {
 
 // --- LOCKING LOGIC ---
 function attemptLock(barcode) {
-    const lockRef = db.ref('temporary_locks/' + btoa(barcode).replace(/=/g, "")); 
+    const lockKey = btoa(barcode).replace(/=/g, "");
+    const lockRef = db.ref('temporary_locks/' + lockKey); 
     return lockRef.transaction((currentData) => {
         if (currentData === null || (Date.now() - currentData.time > 300000)) {
             return { user: loggedInUser, time: Date.now() };
@@ -107,7 +111,7 @@ function releaseLock(barcode) {
     }
 }
 
-// --- MASTER DATA LOADING (Updated for MM/DD/YYYY) ---
+// --- MASTER DATA LOADING ---
 function loadMasterData(input) {
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -123,12 +127,11 @@ function loadMasterData(input) {
             const fullLoc = columns[2] || "N/A";
             const locParts = fullLoc.split("-");
             
-            // --- Date Parsing Logic for MM/DD/YYYY ---
             let rawDate = columns[3] || "";
             let m = "N/A", y = "N/A", displayDate = rawDate;
 
             if (rawDate.includes("/")) {
-                const parts = rawDate.split("/"); // [MM, DD, YYYY]
+                const parts = rawDate.split("/"); 
                 const monthIdx = parseInt(parts[0]) - 1;
                 if (monthIdx >= 0 && monthIdx < 12) m = MONTH_ORDER[monthIdx];
                 y = parts[2] ? (parts[2].length === 2 ? "20" + parts[2] : parts[2]) : "N/A";
@@ -140,7 +143,7 @@ function loadMasterData(input) {
                 displayDate = m + "-" + y.slice(-2);
             }
 
-            columns[3] = displayDate; // Update row for the UI
+            columns[3] = displayDate;
             newRawRows.push(columns);
 
             newMasterDB[columns[0].toUpperCase()] = { 
@@ -181,14 +184,8 @@ function rebuildFilters() {
 
     Array.from(bldgSet).sort().forEach(x => b.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(prodSet).sort().forEach(x => p.innerHTML += `<option value="${x}">${x}</option>`);
-    
-    // Chronological Month Sort
-    Array.from(monthSet).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b))
-        .forEach(x => m.innerHTML += `<option value="${x}">${x}</option>`);
-    
-    // Numerical Year Sort
-    Array.from(yearSet).sort((a,b) => parseInt(a) - parseInt(b))
-        .forEach(x => y.innerHTML += `<option value="${x}">${x}</option>`);
+    Array.from(monthSet).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)).forEach(x => m.innerHTML += `<option value="${x}">${x}</option>`);
+    Array.from(yearSet).sort((a,b) => parseInt(a) - parseInt(b)).forEach(x => y.innerHTML += `<option value="${x}">${x}</option>`);
 }
 
 function updateDisplay() {
@@ -204,22 +201,24 @@ function updateDisplay() {
         return (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf);
     });
 
-    // Calculate Scanned items specifically for the current filtered view
-    const successScanned = scanHistory.filter(h => {
+    const currentAuditResults = scanHistory.filter(h => {
         const m = masterDB[h.barcode.toUpperCase()];
         if (!m) return false;
-        const matchesFilter = (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf);
-        return !h.isFail && matchesFilter;
-    }).length;
+        return (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf);
+    });
+
+    const successScanned = currentAuditResults.filter(h => !h.isFail).length;
 
     let per = filteredTargetList.length > 0 ? Math.min(100, Math.round((successScanned / filteredTargetList.length) * 100)) : 0;
     document.getElementById('progressSubLabel').innerText = `Success: ${successScanned} / ${filteredTargetList.length}`;
     drawGauge(per);
 
+    // Update Failure Chart Logic
+    updateFailureChart(currentAuditResults.filter(h => h.isFail));
+
     document.getElementById('totalScans').innerText = scanHistory.length;
     document.getElementById('totalFails').innerText = scanHistory.filter(x => x.isFail).length;
 
-    // Render Audit History Table
     document.getElementById('inventoryBody').innerHTML = scanHistory
         .filter(h => h.barcode.toUpperCase().includes(s) || h.name.toUpperCase().includes(s))
         .map(i => {
@@ -238,7 +237,6 @@ function updateDisplay() {
             </tr>`;
         }).join('');
 
-    // Render Pending Items Table
     const scannedIds = new Set(scanHistory.map(x => x.barcode.toUpperCase()));
     document.getElementById('pendingBody').innerHTML = filteredTargetList.filter(c => {
         const item = masterDB[c];
@@ -258,9 +256,48 @@ function updateDisplay() {
     }).join('');
 }
 
+// NEW: Failure Chart Rendering Logic
+function updateFailureChart(failedItems) {
+    const counts = {};
+    failedItems.forEach(item => {
+        const r = (item.remark && item.remark !== "-") ? item.remark : "Generic Failure";
+        counts[r] = (counts[r] || 0) + 1;
+    });
+
+    const labels = Object.keys(counts);
+    const data = Object.values(counts);
+    const ctx = document.getElementById('failureChart').getContext('2d');
+    
+    if (failureChartInstance) failureChartInstance.destroy();
+
+    if (labels.length === 0) {
+        document.getElementById('failureLegend').innerHTML = "No failures detected for current filters.";
+        return;
+    }
+
+    failureChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: ['#ff1744', '#ff9100', '#ffd600', '#2979ff', '#cc65fe'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            cutout: '70%',
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    document.getElementById('failureLegend').innerHTML = labels.map((l, i) => 
+        `<div><span style="color:${failureChartInstance.data.datasets[0].backgroundColor[i]}">●</span> ${l}: <strong>${data[i]}</strong></div>`
+    ).join('');
+}
+
 // --- GAUGE ANIMATION ---
 function drawGauge(percent) { targetGaugeValue = percent; animateGauge(); }
-
 function animateGauge() {
     const diff = targetGaugeValue - currentGaugeValue;
     if (Math.abs(diff) < 0.1) { currentGaugeValue = targetGaugeValue; } 
@@ -358,7 +395,6 @@ function submitQC() {
         auditData.cloudId = newRef.key;
         newRef.set(auditData);
     } else {
-        alert("OFFLINE! Saved locally.");
         pendingUploads.push(auditData);
         localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
         scanHistory.unshift(auditData);
@@ -402,20 +438,13 @@ async function logout() {
 function initScannerInput() {
     const col = document.getElementById('barcodeCollector');
     if (!col) return;
-
     document.addEventListener('mousedown', (e) => { 
         const isModalVisible = document.getElementById('qcModal').style.display === 'flex';
         const isInteractive = ['INPUT', 'SELECT', 'BUTTON', 'A', 'TEXTAREA'].includes(e.target.tagName);
-        if (!isModalVisible && !isInteractive) { 
-            setTimeout(() => col.focus(), 50); 
-        }
+        if (!isModalVisible && !isInteractive) { setTimeout(() => col.focus(), 50); }
     });
-
     col.addEventListener('keypress', (e) => { 
-        if (e.key === 'Enter') { 
-            handleScannedCode(col.value); 
-            col.value = ""; 
-        } 
+        if (e.key === 'Enter') { handleScannedCode(col.value); col.value = ""; } 
     });
     col.focus();
 }
@@ -423,10 +452,7 @@ function initScannerInput() {
 function submitManualEntry() {
     const input = document.getElementById('manualBarcode');
     const barcode = input.value.trim();
-    if (barcode) {
-        handleScannedCode(barcode);
-        input.value = "";
-    }
+    if (barcode) { handleScannedCode(barcode); input.value = ""; }
 }
 
 // --- EXPORT & ADMIN ---
@@ -460,6 +486,43 @@ function exportToExcel() {
     XLSX.writeFile(wb, `Audit_Report_Full.xlsx`);
 }
 
+function exportFilteredOnly() {
+    const bf = document.getElementById('filterBuilding').value;
+    const pf = document.getElementById('filterProduction').value;
+    const mf = document.getElementById('filterMonth').value;
+    const yf = document.getElementById('filterYear').value;
+
+    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+    let auditData = [auditHeader];
+    let unregisteredData = [auditHeader];
+
+    rawMasterRows.slice(1).forEach(r => {
+        const code = r[0].toUpperCase();
+        const item = masterDB[code];
+        const baseRow = r.slice(0, 6);
+        if (item && (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf)) {
+            const s = scanHistory.find(h => h.barcode.toUpperCase() === code);
+            if (s) {
+                const statusLabel = s.isFail ? "FAIL (AUDIT)" : "SCANNED";
+                auditData.push([...baseRow, statusLabel, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+            } else {
+                auditData.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
+            }
+        }
+    });
+
+    scanHistory.forEach(s => {
+        if (!masterDB[s.barcode.toUpperCase()]) {
+             unregisteredData.push([s.barcode, s.name, "N/A", "N/A", "UNREGISTERED", "N/A", "FAIL (UNREGISTERED)", s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+        }
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), "Filtered Audit");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(unregisteredData), "Filtered Unregistered");
+    XLSX.writeFile(wb, `Audit_Report_Filtered.xlsx`);
+}
+
 function deleteRow(cloudId) { 
     if(confirm("Remove from Cloud?")) { if(cloudId) db.ref('audit_history/' + cloudId).remove(); }
 }
@@ -481,6 +544,6 @@ async function toggleCamera() {
         const config = { fps: 30, qrbox: {width: 280, height: 200} };
         html5QrCode.start({ facingMode: "environment" }, config, (text) => {
             html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text); });
-        }).catch(err => alert("Camera Error: Check HTTPS and permissions."));
+        }).catch(err => alert("Camera Error."));
     } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
 }
