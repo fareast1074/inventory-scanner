@@ -192,7 +192,6 @@ function updateDisplay() {
     document.getElementById('progressSubLabel').innerText = `Success: ${successScanned} / ${filteredTargetList.length}`;
     drawGauge(per);
 
-    // Update Failure Chart specifically based on Remark logic
     updateFailureChart(currentAuditResults.filter(h => h.isFail));
 
     document.getElementById('totalScans').innerText = scanHistory.length;
@@ -235,7 +234,6 @@ function updateDisplay() {
     }).join('');
 }
 
-// REFRESHED: Failure Chart logic based on specific remarks
 function updateFailureChart(failedItems) {
     const validRemarks = [
         "Missing due date sticker", 
@@ -247,7 +245,6 @@ function updateFailureChart(failedItems) {
     ];
 
     const counts = {};
-    // Initialize counts for all valid remarks to 0
     validRemarks.forEach(r => counts[r] = 0);
     counts["Others"] = 0;
 
@@ -255,7 +252,7 @@ function updateFailureChart(failedItems) {
         const r = item.remark ? item.remark.trim() : "";
         if (validRemarks.includes(r)) {
             counts[r]++;
-        } else {
+        } else if (r !== "-" && r !== "") {
             counts["Others"]++;
         }
     });
@@ -292,7 +289,6 @@ function updateFailureChart(failedItems) {
     ).join('');
 }
 
-// --- GAUGE ANIMATION ---
 function drawGauge(percent) { targetGaugeValue = percent; animateGauge(); }
 function animateGauge() {
     const diff = targetGaugeValue - currentGaugeValue;
@@ -310,7 +306,6 @@ function animateGauge() {
     if(pText) { pText.innerText = Math.round(currentGaugeValue) + "%"; pText.style.color = '#2e7d32'; }
 }
 
-// --- SCAN HANDLING & MODAL ---
 async function handleScannedCode(barcode) {
     if (!barcode) return;
     const cleanCode = barcode.trim().replace(/[\r\n]/g, ""); 
@@ -366,13 +361,18 @@ function setToggle(type, val) {
     }
 }
 
+// UPDATED: Logic to fail if Remark is not empty
 function submitQC() {
     if(!currentItem) return;
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || currentItem.isUnregistered);
+    const remarkValue = document.getElementById('qcRemark').value.trim();
+    
+    // Fails if Loc is WRONG, Due is EXPIRED, Unregistered, OR remark is typed
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || currentItem.isUnregistered || remarkValue.length > 0);
+    
     const auditData = {
         id: Date.now(), time: new Date().toLocaleTimeString(), barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
         locRes: selectedLoc, dueRes: selectedDue, msaRes: selectedMsa, 
-        remark: document.getElementById('qcRemark').value || "-", isFail: failed, isUnregistered: currentItem.isUnregistered
+        remark: remarkValue || "-", isFail: failed, isUnregistered: currentItem.isUnregistered
     };
     if (isOnline) {
         const newRef = db.ref('audit_history').push();
