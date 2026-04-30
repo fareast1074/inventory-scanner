@@ -361,7 +361,7 @@ function setToggle(type, val) {
     }
 }
 
-// UPDATED: Logic to fail if Remark is not empty
+// SUBMIT QC: Logic for Date + Time + Failure Rules
 function submitQC() {
     if(!currentItem) return;
     const remarkValue = document.getElementById('qcRemark').value.trim();
@@ -369,11 +369,24 @@ function submitQC() {
     // Fails if Loc is WRONG, Due is EXPIRED, Unregistered, OR remark is typed
     const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || currentItem.isUnregistered || remarkValue.length > 0);
     
+    // Combine Date and Time
+    const now = new Date();
+    const dateTimeStr = now.toLocaleDateString('en-GB') + " " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
     const auditData = {
-        id: Date.now(), time: new Date().toLocaleTimeString(), barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
-        locRes: selectedLoc, dueRes: selectedDue, msaRes: selectedMsa, 
-        remark: remarkValue || "-", isFail: failed, isUnregistered: currentItem.isUnregistered
+        id: Date.now(), 
+        time: dateTimeStr, // Now includes Date and Time
+        barcode: currentItem.barcode, 
+        name: currentItem.name, 
+        pic: loggedInUser, 
+        locRes: selectedLoc, 
+        dueRes: selectedDue, 
+        msaRes: selectedMsa, 
+        remark: remarkValue || "-", 
+        isFail: failed, 
+        isUnregistered: currentItem.isUnregistered
     };
+
     if (isOnline) {
         const newRef = db.ref('audit_history').push();
         auditData.cloudId = newRef.key;
@@ -439,7 +452,7 @@ function submitManualEntry() {
 
 function exportToExcel() {
     if (!rawMasterRows.length && scanHistory.length === 0) return alert("No data to export");
-    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Date/Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
     let auditData = [auditHeader];
     let unregisteredData = [auditHeader];
     rawMasterRows.slice(1).forEach(r => {
@@ -469,9 +482,8 @@ function exportFilteredOnly() {
     const pf = document.getElementById('filterProduction').value;
     const mf = document.getElementById('filterMonth').value;
     const yf = document.getElementById('filterYear').value;
-    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Date/Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
     let auditData = [auditHeader];
-    let unregisteredData = [auditHeader];
     rawMasterRows.slice(1).forEach(r => {
         const code = r[0].toUpperCase();
         const item = masterDB[code];
