@@ -87,10 +87,22 @@
         </div>
         
 
-        <div class="stats-bar">
-            <div class="stat-card"><span id="totalScans" class="stat-val">0</span><span class="stat-lbl">Items Scanned</span></div>
-            <div class="stat-card" style="border-color: var(--danger);"><span id="totalFails" class="stat-val" style="color: var(--danger);">0</span><span class="stat-lbl">Abnormal Detected</span></div>
-        </div>
+      <div class="stats-bar">
+    <div class="stat-card">
+        <span id="totalScans" class="stat-val">0</span>
+        <span class="stat-lbl">Items Scanned</span>
+    </div>
+
+    <div class="stat-card" style="border-color: var(--danger);">
+        <span id="totalFails" class="stat-val" style="color: var(--danger);">0</span>
+        <span class="stat-lbl">Abnormal Detected</span>
+    </div>
+
+    <div class="stat-card" style="border-color: var(--warning);">
+        <span id="totalNotScanned" class="stat-val" style="color: var(--warning);">0</span>
+        <span class="stat-lbl">Not Scanned</span>
+    </div>
+</div>
 
         <div style="display:flex; gap:10px; margin-bottom:15px;">
             <button onclick="toggleCamera()" class="btn-camera">📷 CAMERA SCAN</button>
