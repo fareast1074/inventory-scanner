@@ -187,15 +187,21 @@ function updateDisplay() {
         return (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf);
     });
 
-    const successScanned = currentAuditResults.filter(h => !h.isFail).length;
-    let per = filteredTargetList.length > 0 ? Math.min(100, Math.round((successScanned / filteredTargetList.length) * 100)) : 0;
-    document.getElementById('progressSubLabel').innerText = `Success: ${successScanned} / ${filteredTargetList.length}`;
-    drawGauge(per);
+    const scannedInTarget = currentAuditResults.length;
+
+let per = filteredTargetList.length > 0
+    ? Math.min(100, Math.round((scannedInTarget / filteredTargetList.length) * 100))
+    : 0;
+
+document.getElementById('progressSubLabel').innerText = `Scanned: ${scannedInTarget} / ${filteredTargetList.length}`;
+
+drawGauge(per);
 
     updateFailureChart(currentAuditResults.filter(h => h.isFail));
 
     document.getElementById('totalScans').innerText = scanHistory.length;
     document.getElementById('totalFails').innerText = scanHistory.filter(x => x.isFail).length;
+	document.getElementById('totalNotScanned').innerText = Math.max(filteredTargetList.length - scannedInTarget, 0);
 
     document.getElementById('inventoryBody').innerHTML = scanHistory
         .filter(h => h.barcode.toUpperCase().includes(s) || h.name.toUpperCase().includes(s))
