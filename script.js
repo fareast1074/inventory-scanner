@@ -268,24 +268,48 @@ function updateFailureChart(failedItems) {
         return;
     }
 
+    const colors = ['#ff1744', '#ff9100', '#ffd600', '#2979ff', '#00e676', '#d500f9', '#8892b0'];
+
     failureChartInstance = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'bar',
         data: {
             labels: labels,
             datasets: [{
+                label: 'Failures',
                 data: data,
-                backgroundColor: ['#ff1744', '#ff9100', '#ffd600', '#2979ff', '#00e676', '#d500f9', '#8892b0'],
-                borderWidth: 0
+                backgroundColor: colors.slice(0, labels.length),
+                borderWidth: 0,
+                borderRadius: 6,
+                barThickness: 16
             }]
         },
         options: {
-            cutout: '70%',
-            plugins: { legend: { display: false } }
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        precision: 0
+                    }
+                },
+                y: {
+                    ticks: {
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            }
         }
     });
 
     document.getElementById('failureLegend').innerHTML = labels.map((l, i) => 
-        `<div><span style="color:${failureChartInstance.data.datasets[0].backgroundColor[i]}">●</span> ${l}: <strong>${data[i]}</strong></div>`
+        `<div><span style="color:${colors[i]}">●</span> ${l}: <strong>${data[i]}</strong></div>`
     ).join('');
 }
 
